@@ -1,0 +1,10 @@
+services:
+  project_template_frontend_nextjs:
+    build:
+      context: .
+      dockerfile: project_template_frontend_nextjs.dockerfile
+    restart: always
+    container_name: project_template_frontend_nextjs
+    env_file: ".env"
+    ports:
+      - "8001:8001"

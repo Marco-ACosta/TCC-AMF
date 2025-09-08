@@ -1,0 +1,8 @@
+.venv
+.flaskenv
+__pycache__/
+uploads
+transcriptions
+voice
+sessions
+languages.json
