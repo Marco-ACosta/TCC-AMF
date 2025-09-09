@@ -1,8 +1,7 @@
 type envProps = {
-  /** URL base do backend */
   BackendUrl: () => string;
-  /** Ambiente do frontend */
   Environment: () => "testing" | "production";
+  SignalingURL: () => string;
 };
 
 /** Buscador de variáveis de ambiente */
@@ -24,6 +23,13 @@ const env: envProps = {
       _ === "testing"
       ? "testing"
       : "production";
+  },
+  SignalingURL: () => {
+    const _ = String(process.env["NEXT_PUBLIC_SIGNALING_URL"]);
+    if (_ === "" || _ === "undefined") {
+      throw new Error("NEXT_PUBLIC_SIGNALING_URL não encontrado no ENV.");
+    }
+    return _;
   },
 };
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Screen from "@/components/base/Screen";
 import io from "socket.io-client";
+import env from "@/config/env";
 
 type IceServer = {
   urls: string | string[];
@@ -15,7 +16,7 @@ export default function RoomPage({ params }: { params: { room: string } }) {
   const room = params.room;
 
   const socket = useMemo(() => {
-    const baseURL = process.env.NEXT_PUBLIC_SIGNALING_URL as string;
+    const baseURL = env.SignalingURL();
     return io(baseURL, {
       transports: ["polling", "websocket"],
       path: "/socket.io",
