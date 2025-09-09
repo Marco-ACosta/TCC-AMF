@@ -1,64 +1,61 @@
-"use client"
+"use client";
 
-import { createContext, useContext, useEffect, useState } from "react"
-import Screen from "@/components/base/Screen"
+import { createContext, useContext, useEffect, useState } from "react";
+import Screen from "@/components/base/Screen";
+import { useRouter } from "next/navigation";
+import { LocalStorage } from "@/storage/LocalStorage";
 
-type AuthContextProps = {
-    children: JSX.Element | JSX.Element[]
-}
+type AuthContextProps = { children: JSX.Element | JSX.Element[] };
 
-type AuthContext = {
-    isLogged: boolean
-    /** Usando com o hook useTransition, pode não realizar um refresh no componente se necessário */
-    setIsLogged: React.Dispatch<React.SetStateAction<boolean>>
-    /** Função para login */
-    login: (credentials: any) => Promise<void>
-    /** Função para cadastro */
-    register: (credentials: any) => Promise<void>
-    /** Função para logoff */
-    logoff: () => Promise<void>
-}
+type AuthContextType = {
+  isLogged: boolean;
+  setIsLogged: React.Dispatch<React.SetStateAction<boolean>>;
+  login: (credentials: { email: string; password: string }) => Promise<void>;
+  logoff: () => Promise<void>;
+};
 
-const AuthContext = createContext<AuthContext | null>(null)
+const AuthContext = createContext<AuthContextType | null>(null);
 
-/** Context de autenticação, realiza o refresh do token de autenticação e valida credenciais no localStorage */
 export default function AuthContextComponent({ children }: AuthContextProps) {
-    const [ loading, setLoading ] = useState<boolean>(false)
-    const [ isLogged, setIsLogged ] = useState<boolean>(false)
+  const [loading, setLoading] = useState(true);
+  const [isLogged, setIsLogged] = useState(false);
+  const router = useRouter();
 
-    useEffect(() => {
-        // TODO: Regras de negócio para autenticação
-    }, [])
+  // ler do storage só no cliente
+  useEffect(() => {
+    setIsLogged(LocalStorage.logged.get() ?? false);
+    setLoading(false);
+  }, []);
 
-    const login = async (credentials: any): Promise<void> => { }
+  const login = async (_credentials: { email: string; password: string }) => {
+    setIsLogged(true);
+    LocalStorage.logged.set(true);
+    router.push("/tradutor");
+  };
 
-    const register = async (credentials: any): Promise<void> => { }
+  const logoff = async () => {
+    setIsLogged(false);
+    LocalStorage.logged.set(false);
+    router.push("/login");
+  };
 
-    const logoff = async (): Promise<void> => { }
-
-    if (loading) {
-        return (
-            <Screen>
-                <h3>Carregando...</h3>
-            </Screen>
-        )
-    }
-
+  if (loading) {
     return (
-        <AuthContext.Provider value={{
-            isLogged,
-            setIsLogged,
-            login,
-            register,
-            logoff,
-        }}>
-            { children }
-        </AuthContext.Provider>
-    )
+      <Screen>
+        <h3>Carregando...</h3>
+      </Screen>
+    );
+  }
+
+  return (
+    <AuthContext.Provider value={{ isLogged, setIsLogged, login, logoff }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function AuthContextProvider() {
-    const context = useContext(AuthContext)
-    if (!context) throw new Error("AuthContext chamado fora do provider.")
-    return context
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("AuthContext chamado fora do provider.");
+  return context;
 }
