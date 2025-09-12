@@ -11,9 +11,9 @@ from flask_socketio import SocketIO, join_room, leave_room, emit
 # =========================
 # Configuração de logging
 # =========================
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()            # INFO | DEBUG | WARNING | ERROR
-LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()          # text | json
-ENGINEIO_LOGS = os.getenv("ENGINEIO_LOGS", "0") == "1"        # 1 para ativar logs verbosos do engineio
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()
+ENGINEIO_LOGS = os.getenv("ENGINEIO_LOGS", "0") == "1"
 
 RESERVED_LOG_KEYS = {
     "name", "msg", "args", "levelname", "levelno", "pathname", "filename", "module",
@@ -29,7 +29,6 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        # Inclui campos extra passados via `extra=...`
         extra = {k: v for k, v in record.__dict__.items() if k not in RESERVED_LOG_KEYS}
         if extra:
             payload.update(extra)
@@ -47,12 +46,7 @@ root_logger.setLevel(LOG_LEVEL)
 
 log = logging.getLogger("webrtc_signaling")
 
-# =========================
-# App & Socket.IO
-# =========================
 app = Flask(__name__)
-
-# Você pode passar o próprio logger para o SocketIO; engineio_logger só se precisar de verbosidade extra.
 socketio_logger = log if ENGINEIO_LOGS else False
 socketio = SocketIO(
     app,
@@ -62,11 +56,8 @@ socketio = SocketIO(
     engineio_logger=socketio_logger
 )
 
-# =========================
-# Estado em memória (apenas para telemetria/logs)
-# =========================
-room_members = defaultdict(set)   # room -> {sid, ...}
-sid_rooms = defaultdict(set)      # sid  -> {room, ...}
+room_members = defaultdict(set)   
+sid_rooms = defaultdict(set)      
 
 def _candidate_type(candidate_obj) -> str | None:
     """
@@ -98,17 +89,9 @@ def _log_room_state(room: str):
         extra={"event": "room_state", "room": room, "size": size, "members": list(room_members[room])}
     )
 
-# =========================
-# HTTP auxiliares
-# =========================
 @app.get("/healthz")
 def healthz():
     return jsonify(status="ok")
-
-@app.get("/_debug/rooms")
-def debug_rooms():
-    # Não exponha em produção sem proteção!
-    return jsonify({room: list(members) for room, members in room_members.items()})
 
 # =========================
 # Eventos Socket.IO
@@ -148,14 +131,12 @@ def on_join(data):
     )
     _log_room_state(room)
 
-    # >>> NOVO: devolve o estado da sala para QUEM ENTROU <<<
     emit(
         "room-info",
         {"room": room, "members": list(room_members[room])},
         to=request.sid
     )
 
-    # Notifica os outros que alguém entrou (comportamento original)
     emit("peer-joined", {"sid": request.sid}, room=room, include_self=False)
 
 @socketio.on("leave")
