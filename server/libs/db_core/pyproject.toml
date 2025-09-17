@@ -1,0 +1,8 @@
+[project]
+name = "db_core"
+version = "0.1.0"
+dependencies = ["SQLAlchemy>=2.0"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -191,6 +191,6 @@ def default_error_handler(e):
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "5001"))
+    port = int(os.getenv("PORT", "5002"))
     log.info("starting_signaling_server", extra={"host": host, "port": port, "log_level": LOG_LEVEL, "engineio_logs": ENGINEIO_LOGS})
     socketio.run(app, host=host, port=port)

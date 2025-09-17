@@ -1,0 +1,16 @@
+import os, time
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import MetaData, Integer, BigInteger
+
+DB_SCHEMA = os.getenv("DB_SCHEMA", "public")  # todos no mesmo schema 'public'
+
+class Base(DeclarativeBase):
+    metadata = MetaData(schema=DB_SCHEMA)
+
+class IdMixin:
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+class TimestampMixin:
+    created_at: Mapped[int] = mapped_column(BigInteger, default=lambda: int(time.time()))
+    updated_at: Mapped[int] = mapped_column(BigInteger, default=lambda: int(time.time()),
+                                            onupdate=lambda: int(time.time()))
