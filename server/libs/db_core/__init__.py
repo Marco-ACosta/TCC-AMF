@@ -1,8 +1,9 @@
-import os, time
+import os
+import time
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import MetaData, Integer, BigInteger
 
-DB_SCHEMA = os.getenv("DB_SCHEMA", "public")  # todos no mesmo schema 'public'
+DB_SCHEMA = os.getenv("DB_SCHEMA", "public")
 
 class Base(DeclarativeBase):
     metadata = MetaData(schema=DB_SCHEMA)

@@ -7,11 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Pacote compartilhado
-COPY libs/db_core /app/libs/db_core
-RUN pip install -e /app/libs/db_core
+COPY libs /app/libs
+RUN pip install -e /app/libs
 
-# Alembic + deps
 COPY migrations /app/migrations
 COPY alembic.ini /app/alembic.ini
-RUN pip install --no-cache-dir "SQLAlchemy>=2.0" "psycopg[binary]==3.2.10" "alembic>=1.13"
+RUN pip install --no-cache-dir "SQLAlchemy>=2.0" "psycopg[binary]==3.2.10" "alembic>=1.13" "passlib[bcrypt]==1.7.4" "argon2-cffi>=23.1.0"

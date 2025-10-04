@@ -8,9 +8,6 @@ from collections import defaultdict
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, join_room, leave_room, emit
 
-# =========================
-# Configuração de logging
-# =========================
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()
 ENGINEIO_LOGS = os.getenv("ENGINEIO_LOGS", "0") == "1"
@@ -52,7 +49,7 @@ socketio = SocketIO(
     app,
     cors_allowed_origins="*",
     async_mode="eventlet",
-    logger=False,                  # Mantém nossos logs centralizados no `log`
+    logger=False,
     engineio_logger=socketio_logger
 )
 
@@ -93,12 +90,8 @@ def _log_room_state(room: str):
 def healthz():
     return jsonify(status="ok")
 
-# =========================
-# Eventos Socket.IO
-# =========================
 @socketio.on("connect")
 def on_connect():
-    # `request.remote_addr` pode não refletir IP real atrás de proxy; use X-Forwarded-For no reverse-proxy se necessário.
     log.info(
         "client_connected",
         extra={"event": "connect", "sid": request.sid, "ip": request.remote_addr}
@@ -184,7 +177,6 @@ def on_ice_candidate(data):
     )
     emit("ice-candidate", data, room=room, include_self=False)
 
-# Captura erros não tratados nos handlers Socket.IO
 @socketio.on_error_default
 def default_error_handler(e):
     log.exception("socketio_handler_error", extra={"event": "error", "sid": request.sid})

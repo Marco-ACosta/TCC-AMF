@@ -1,7 +1,7 @@
 services:
   gateway:
     image: nginx:1.27-alpine
-    depends_on: [room, signal]
+    depends_on: [room, signal, user]
     ports:
       - "5001:80" # <- a URL única
     volumes:
@@ -81,6 +81,23 @@ services:
       pgbouncer:
         condition: service_started
     expose: ["5002"]
+
+  user:
+    build:
+      context: .
+      dockerfile: user/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@pgbouncer:6432/postgresql
+      DB_SCHEMA: public
+      DB_POOL_SIZE: 10
+      DB_MAX_OVERFLOW: 20
+      DB_POOL_RECYCLE: 1800
+      SQL_ECHO: 0
+      PORT: 5003
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    expose: ["5003"]
 
 volumes:
   pgdata:

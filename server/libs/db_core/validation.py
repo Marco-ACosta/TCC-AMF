@@ -9,7 +9,7 @@ def parse_body(model: type[BaseModel]):
         def wrapper(*args, **kwargs):
             try:
                 data = request.get_json(force=True, silent=False)
-                obj = model.model_validate(data)  # Pydantic v2
+                obj = model.model_validate(data)
             except ValidationError as e:
                 return jsonify({"error": "validation_error", "detail": e.errors()}), 422
             except Exception:
