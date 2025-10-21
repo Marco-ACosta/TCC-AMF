@@ -127,6 +127,7 @@ export const LocalStorage: LocalStorageProps = {
 
   login(apiToken, credentials) {
     LocalStorage.logged.set(true);
+    console.log(apiToken);
     LocalStorage.apiToken.set(apiToken);
     LocalStorage.loginCredentials.set(credentials);
   },

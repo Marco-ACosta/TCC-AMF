@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import Screen from "@/components/base/Screen";
 import { useRouter } from "next/navigation";
 import { LocalStorage } from "@/storage/LocalStorage";
-
+import AuthService from "@/services/api/authService";
 type AuthContextProps = { children: JSX.Element | JSX.Element[] };
 
 type AuthContextType = {
@@ -21,22 +21,31 @@ export default function AuthContextComponent({ children }: AuthContextProps) {
   const [isLogged, setIsLogged] = useState(false);
   const router = useRouter();
 
-  // ler do storage só no cliente
   useEffect(() => {
     setIsLogged(LocalStorage.logged.get() ?? false);
     setLoading(false);
   }, []);
 
-  const login = async (_credentials: { email: string; password: string }) => {
+  const login = async (credentials: { email: string; password: string }) => {
+    const response = await AuthService.Login(credentials);
+    if (response.Data.error) {
+      setIsLogged(false);
+      LocalStorage.logged.set(false);
+      const messageError =
+        response.Data.error === "credenciais_invalidas"
+          ? "Email ou senha incorretos."
+          : response.Data.error;
+      throw new Error(messageError, { cause: response.Data.error });
+    }
     setIsLogged(true);
-    LocalStorage.logged.set(true);
+    LocalStorage.login(response.Data.access_token, credentials);
     router.push("/palestrante");
   };
 
   const logoff = async () => {
     setIsLogged(false);
     LocalStorage.logged.set(false);
-    router.push("/login");
+    router.push("/");
   };
 
   if (loading) {

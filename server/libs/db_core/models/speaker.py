@@ -7,7 +7,6 @@ from db_core import IdMixin, TimestampMixin
 from . import Base
 
 if TYPE_CHECKING:
-    from .room_speaker import RoomSpeaker
     from .language_speaker import LanguageSpeaker
     from .user import User
 
@@ -23,24 +22,11 @@ class Speaker(Base, IdMixin, TimestampMixin):
         index=True,
     )
 
-    room_speakers: Mapped[list["RoomSpeaker"]] = relationship(
-        "RoomSpeaker",
-        back_populates="speaker",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
     language_speakers: Mapped[list["LanguageSpeaker"]] = relationship(
         "LanguageSpeaker",
         back_populates="speaker",
         cascade="all, delete-orphan",
         passive_deletes=True,
-    )
-
-    rooms = association_proxy(
-        "room_speakers",
-        "room",
-        creator=lambda room: RoomSpeaker(room=room),
     )
 
     languages = association_proxy(

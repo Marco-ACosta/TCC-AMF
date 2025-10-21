@@ -8,7 +8,8 @@ from . import Base
 if TYPE_CHECKING:
     from .speaker import Speaker
     from .translator import Translator
-
+    from .language_room_user import LanguageRoomUser
+    
 class User(Base, IdMixin, TimestampMixin):
     __tablename__ = "users"
 
@@ -32,6 +33,13 @@ class User(Base, IdMixin, TimestampMixin):
         "Translator",
         back_populates="user",
         uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    language_room_users: Mapped[list["LanguageRoomUser"]] = relationship(
+        "LanguageRoomUser",
+        back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )

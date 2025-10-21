@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from db_core import IdMixin, TimestampMixin
+from db_core import TimestampMixin
 from . import Base
 
 if TYPE_CHECKING:
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from .translator import Translator
 
 
-class LanguageTranslator(Base, IdMixin, TimestampMixin):
+class LanguageTranslator(Base, TimestampMixin):
     __tablename__ = "language_translators"
 
     language_id: Mapped[int] = mapped_column(

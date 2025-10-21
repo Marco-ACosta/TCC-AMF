@@ -8,7 +8,6 @@ from . import Base
 
 if TYPE_CHECKING:
     from .language_translator import LanguageTranslator
-    from .room_translator import RoomTranslator
     from .user import User
 
 class Translator(Base, IdMixin, TimestampMixin):
@@ -21,24 +20,11 @@ class Translator(Base, IdMixin, TimestampMixin):
         index=True,
     )
 
-    room_translators: Mapped[list["RoomTranslator"]] = relationship(
-        "RoomTranslator",
-        back_populates="translator",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
     language_translators: Mapped[list["LanguageTranslator"]] = relationship(
         "LanguageTranslator",
         back_populates="translator",
         cascade="all, delete-orphan",
         passive_deletes=True,
-    )
-
-    translators = association_proxy(
-        "room_translators",
-        "room",
-        creator=lambda room: RoomTranslator(room=room),
     )
 
     languages = association_proxy(

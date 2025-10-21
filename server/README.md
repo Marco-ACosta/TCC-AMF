@@ -19,5 +19,5 @@ docker compose up -d room signal
 
 APIs:
 
-- `GET/POST http://localhost:5001/rooms` (body: `{ "name": "..." }`)
+- `GET/POST http://localhost:5004/rooms` (body: `{ "name": "..." }`)
 - `GET/POST http://localhost:5002/signals` (body: `{ "kind": "...", "payload": "..." }`)

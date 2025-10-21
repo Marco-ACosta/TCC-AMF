@@ -6,14 +6,12 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool, text
 from db_core.models import Base
+import re
 import db_core.models.room  # noqa: F401
 import db_core.models.translator    # noqa: F401
 import db_core.models.language  # noqa: F401
 import db_core.models.speaker   # noqa: F401
-import db_core.models.language_translator   # noqa: F401
-import db_core.models.language_speaker  # noqa: F401
-import db_core.models.room_translator   # noqa: F401
-import db_core.models.room_speaker  # noqa: F401
+import db_core.models.language_room_user  # noqa: F401
 import db_core.models.user  # noqa: F401
 
 config = context.config
@@ -27,8 +25,30 @@ for p in (str(libs_dir), str(libs_dir / "db_core"), str(project_root)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-database_url = os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
-db_schema = os.getenv("DB_SCHEMA", "public")
+def _pick_database_url() -> str:
+    url = (
+        os.getenv("DATABASE_URL_PGBOUNCER")
+        or os.getenv("DATABASE_URL_DIRECT")
+        or os.getenv("DATABASE_URL")
+        or config.get_main_option("sqlalchemy.url")
+        or ""
+    ).strip()
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL (ou *_PGBOUNCER/_DIRECT) não definido e sqlalchemy.url vazio no alembic.ini"
+        )
+    url = re.sub(r"^postgres://", "postgresql://", url)
+    if url.startswith("postgresql://") and "+psycopg" not in url and "+psycopg2" not in url:
+        try:
+            import psycopg  # noqa: F401
+            driver = "psycopg"
+        except Exception:
+            driver = "psycopg2"
+        url = url.replace("postgresql://", f"postgresql+{driver}://", 1)
+    return url
+
+database_url = _pick_database_url()
+db_schema = (os.getenv("DB_SCHEMA") or "public").strip() or "public"
 
 config.set_main_option("sqlalchemy.url", database_url or "")
 config.set_main_option("DB_SCHEMA", db_schema)
@@ -48,7 +68,7 @@ def _process_revision_directives(context, revision, directives):
             directives[:] = []
 
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
+    url = database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -67,11 +87,7 @@ def run_migrations_offline():
         context.run_migrations()
 
 def run_migrations_online():
-    connectable = create_engine(
-        config.get_main_option("sqlalchemy.url"),
-        poolclass=pool.NullPool,
-        future=True,
-    )
+    connectable = create_engine(database_url, poolclass=pool.NullPool, future=True)
 
     with connectable.begin() as connection:
         connection.execute(text(f'SET LOCAL search_path TO "{db_schema}"'))

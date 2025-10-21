@@ -27,18 +27,17 @@ from .translator import Translator  # noqa: E402,F401
 from .language import Language  # noqa: E402,F401
 from .user import User  # noqa: E402,F401
 
-from .room_speaker import RoomSpeaker  # noqa: E402,F401
-from .room_translator import RoomTranslator  # noqa: E402,F401
 from .language_speaker import LanguageSpeaker  # noqa: E402,F401
 from .language_translator import LanguageTranslator  # noqa: E402,F401
+from .language_room_user import LanguageRoomUser  # noqa: E402,F401
 
 __all__ = [
     "Base",
     "metadata",
-    "RoomSpeaker",
-    "RoomTranslator",
     "LanguageSpeaker",
     "LanguageTranslator",
+    "LanguageRoomUser",
+
     "Room",
     "Speaker",
     "Translator",
