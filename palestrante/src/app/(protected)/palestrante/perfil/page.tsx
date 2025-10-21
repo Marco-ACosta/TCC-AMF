@@ -1,10 +1,21 @@
 "use client";
 
-import UserService from "@/services/api/userService";
 import { useEffect, useState } from "react";
-import Box from "@/components/base/Box";
 import Screen from "@/components/base/Screen";
-import { Chip, CircularProgress, Divider, TextField } from "@mui/material";
+import Box from "@/components/base/Box";
+import { Divider } from "@mui/material";
+import UserService from "@/services/api/userService";
+
+import ProfileHeader from "@/components/profile/ProfileHeader";
+import UserInfoPanel from "@/components/profile/UserInfoPanel";
+import RoleLanguagesPanel from "@/components/profile/RoleLanguagesPanel";
+import {
+  LoadingBlock,
+  ErrorBlock,
+  EmptyBlock,
+} from "@/components/base/LoadState";
+
+import { ProfileVM } from "@/types/profile";
 
 type ApiLanguage = {
   id: number | string;
@@ -34,20 +45,7 @@ type ApiResponse = {
   speaker: ApiRole;
 };
 
-type Language = { id: number | string; code?: string; name?: string };
-type RoleProfile = { id?: number | string; languages?: Language[] } | null;
-
-type ProfileVM = {
-  id?: number | string;
-  name?: string;
-  email?: string;
-  created_at?: number;
-  updated_at?: number;
-  translator: RoleProfile;
-  speaker: RoleProfile;
-};
-
-export default function ProfileScreen() {
+export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileVM | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +58,7 @@ export default function ProfileScreen() {
         setError(null);
 
         const res = await UserService.GetProfile();
-        const raw: ApiResponse = res?.Data as ApiResponse;
+        const raw: ApiResponse = (res?.Data as ApiResponse) ?? res;
 
         const vm: ProfileVM | null = raw?.user
           ? {
@@ -113,39 +111,6 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  const formatEpoch = (ts?: number) => {
-    if (!ts && ts !== 0) return "";
-    const n = Number(ts);
-    if (Number.isNaN(n)) return "";
-    const ms = String(n).length <= 10 ? n * 1000 : n; // aceita seconds ou ms
-    try {
-      return new Intl.DateTimeFormat("pt-BR", {
-        dateStyle: "short",
-        timeStyle: "short",
-        timeZone: "America/Sao_Paulo",
-      }).format(new Date(ms));
-    } catch {
-      return "";
-    }
-  };
-
-  const renderLanguages = (langs?: Language[]) => {
-    if (!langs || langs.length === 0)
-      return <span style={{ opacity: 0.7 }}>Sem idiomas.</span>;
-    return (
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {langs.map((l) => (
-          <Chip
-            key={String(l.id)}
-            label={[l.name].filter(Boolean).join(" — ")}
-            variant="outlined"
-            size="small"
-          />
-        ))}
-      </div>
-    );
-  };
-
   const hasProfile = !!profile;
 
   return (
@@ -169,88 +134,25 @@ export default function ProfileScreen() {
             padding: 16,
             gap: 12,
           }}>
-          <h1 style={{ textAlign: "center", marginBottom: 8 }}>Perfil</h1>
+          <ProfileHeader />
 
-          {loading && (
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 24,
-              }}>
-              <CircularProgress size={22} />
-              <span>Carregando…</span>
-            </div>
-          )}
-
-          {!!error && (
-            <p style={{ color: "red", marginTop: 8, textAlign: "center" }}>
-              {error}
-            </p>
-          )}
-
+          {loading && <LoadingBlock />}
+          {!!error && <ErrorBlock error={error} />}
           {!loading && !error && !hasProfile && (
-            <p style={{ opacity: 0.8, textAlign: "center" }}>
-              Nenhum perfil encontrado.
-            </p>
+            <EmptyBlock message="Nenhum perfil encontrado." />
           )}
 
           {!loading && !error && hasProfile && (
             <>
-              <TextField
-                label="Nome"
-                variant="outlined"
-                value={profile?.name ?? ""}
-                onChange={() => {}}
-                fullWidth
-                disabled
-              />
+              <UserInfoPanel profile={profile} />
 
-              <TextField
-                label="E-mail"
-                variant="outlined"
-                value={profile?.email ?? ""}
-                onChange={() => {}}
-                fullWidth
-                disabled
-              />
-
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <TextField
-                  label="Criado em"
-                  variant="outlined"
-                  value={formatEpoch(profile?.created_at)}
-                  onChange={() => {}}
-                  disabled
-                  style={{ flex: 1, minWidth: 220 }}
-                />
-                <TextField
-                  label="Atualizado em"
-                  variant="outlined"
-                  value={formatEpoch(profile?.updated_at)}
-                  onChange={() => {}}
-                  disabled
-                  style={{ flex: 1, minWidth: 220 }}
+              <div>
+                <Divider style={{ margin: "8px 0" }} />
+                <RoleLanguagesPanel
+                  title="Palestrante"
+                  role={profile?.speaker}
                 />
               </div>
-
-              <Divider style={{ margin: "8px 0" }} />
-
-              <h3 style={{ margin: "8px 0 4px" }}>Tradutor</h3>
-              {profile?.translator ? (
-                renderLanguages(profile.translator.languages)
-              ) : (
-                <span style={{ opacity: 0.7 }}>Sem perfil de tradutor.</span>
-              )}
-
-              <h3 style={{ margin: "16px 0 4px" }}>Palestrante</h3>
-              {profile?.speaker ? (
-                renderLanguages(profile.speaker.languages)
-              ) : (
-                <span style={{ opacity: 0.7 }}>Sem perfil de palestrante.</span>
-              )}
             </>
           )}
         </div>

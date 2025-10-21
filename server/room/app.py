@@ -687,6 +687,7 @@ def create_app():
             u = lru.user
             if lru.role == "speaker":
                 entry = speakers_by_user.setdefault(u.id, {
+                    "user_id": u.id,
                     "name": u.name,
                     "bio": getattr(getattr(u, "speaker", None), "bio", None),
                     "languages": [],
@@ -702,6 +703,7 @@ def create_app():
 
             elif lru.role == "translator":
                 entry = translators_by_user.setdefault(u.id, {
+                    "user_id": u.id,
                     "name": u.name,
                     "pairs": [],
                     "_pair_keys": set(),
@@ -723,6 +725,7 @@ def create_app():
             d.pop("_pair_keys", None)
 
         return jsonify({
+            "id": room.id,
             "name": room.name,
             "description": room.description,
             "code": room.code,

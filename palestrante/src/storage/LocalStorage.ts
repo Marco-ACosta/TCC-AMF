@@ -4,7 +4,6 @@ export type LocalStorageCredentials = {
   password: string;
 };
 
-/** Tipo com funções específicas para propriedades do local storage */
 type LocalStorageDefiners<T> = {
   get: () => T | null;
   set: (value: T) => void;
@@ -12,15 +11,12 @@ type LocalStorageDefiners<T> = {
 };
 
 type LocalStorageProps = {
-  /** Indica se o usuário está logado */
   logged: LocalStorageDefiners<boolean>;
-  /** Token de autenticação da API */
   apiToken: LocalStorageDefiners<string>;
-  /** Credenciais de login do usuário */
   loginCredentials: LocalStorageDefiners<LocalStorageCredentials>;
-  /** Ações no localStorage quando login */
+  userRole: LocalStorageDefiners<string>;
+  userId: LocalStorageDefiners<string>;
   login: (apiToken: string, credentials: LocalStorageCredentials) => void;
-  /** Ações no localStorage quando logoff */
   logoff: () => void;
 };
 
@@ -53,9 +49,7 @@ function getSafeStorage(): StorageLike {
       window.localStorage.setItem(t, "1");
       window.localStorage.removeItem(t);
       return window.localStorage;
-    } catch {
-      // quota/blocked
-    }
+    } catch {}
   }
   return createMemoryStorage();
 }
@@ -125,9 +119,50 @@ export const LocalStorage: LocalStorageProps = {
     },
   },
 
+  userRole: {
+    get() {
+      try {
+        return storage.getItem("user_role");
+      } catch (e) {
+        console.log(e);
+        return null;
+      }
+    },
+    set(value) {
+      try {
+        storage.setItem("user_role", value);
+      } catch {}
+    },
+    remove() {
+      try {
+        storage.removeItem("user_role");
+      } catch {}
+    },
+  },
+
+  userId: {
+    get() {
+      try {
+        return storage.getItem("user_id");
+      } catch (e) {
+        console.log(e);
+        return null;
+      }
+    },
+    set(value) {
+      try {
+        storage.setItem("user_id", value);
+      } catch {}
+    },
+    remove() {
+      try {
+        storage.removeItem("user_id");
+      } catch {}
+    },
+  },
+
   login(apiToken, credentials) {
     LocalStorage.logged.set(true);
-    console.log(apiToken);
     LocalStorage.apiToken.set(apiToken);
     LocalStorage.loginCredentials.set(credentials);
   },

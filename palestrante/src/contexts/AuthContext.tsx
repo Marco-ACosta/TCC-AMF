@@ -5,6 +5,7 @@ import Screen from "@/components/base/Screen";
 import { useRouter } from "next/navigation";
 import { LocalStorage } from "@/storage/LocalStorage";
 import AuthService from "@/services/api/authService";
+import UserService from "@/services/api/userService";
 type AuthContextProps = { children: JSX.Element | JSX.Element[] };
 
 type AuthContextType = {
@@ -39,7 +40,27 @@ export default function AuthContextComponent({ children }: AuthContextProps) {
     }
     setIsLogged(true);
     LocalStorage.login(response.Data.access_token, credentials);
-    router.push("/palestrante");
+    const userData = await UserService.GetProfile();
+    if (userData.Data.error) {
+      setIsLogged(false);
+      LocalStorage.logged.set(false);
+      throw new Error(userData.ErrorMessage, {
+        cause: userData.Data.error,
+      });
+    }
+    LocalStorage.userId.set(userData.Data.user.id);
+    if (userData.Data?.speaker?.id) {
+      LocalStorage.userRole.set("palestrante");
+      router.push("/palestrante");
+      return;
+    }
+    if (userData.Data?.translator?.id) {
+      LocalStorage.userRole.set("tradutor");
+      router.push("/tradutor");
+      return;
+    }
+    LocalStorage.userRole.set("admin");
+    router.push("/admin");
   };
 
   const logoff = async () => {

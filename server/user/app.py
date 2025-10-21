@@ -252,7 +252,7 @@ def create_app():
                 "email": user.email,
                 "roles": ["user"] if not getattr(user, "is_admin", False) else ["admin"],
                 "scopes": ["rooms:read", "rooms:create", "rooms:update", "rooms:delete", "speakers:read", "speakers:create", "speakers:update", "speakers:delete", "translators:read", "translators:create", "translators:update", "translators:delete"],
-                "fresh": True,
+                "fresh": False,
             },
         )
         return jsonify({"access_token": token, "token_type": "bearer"})
