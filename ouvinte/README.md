@@ -1,50 +1,37 @@
-# Welcome to your Expo app 👋
+# Projeto Mobile TCC Marco
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Inicialização do Projeto
 
-## Get started
+Intalar as dependências:  
+`npm i`
 
-1. Install dependencies
+## Cuidados com o Projeto
 
-   ```bash
-   npm install
-   ```
+Verificar sempre que possível as seguintes questões:
 
-2. Start the app
+#### Atualizações de Dependências
+rodar `npm outdated` e validar dependências desatualizadas.  
 
-   ```bash
-   npx expo start
-   ```
+#### Verificações EXPO
+rodar `npx expo-doctor` após grandes atualizações para corrigir problemas com o projeto.
+rodar `npx expo install --check` para verificar atualizações de dependências EXPO.
 
-In the output, you'll find options to open the app in a
+## Android
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Para a geração ou atualização da pasta `android`, rode `npx expo prebuild`.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+#### Build de Desenvolvimento
 
-## Get a fresh project
+`eas build --platform android --profile development --local`
 
-When you're ready, run:
+#### Build de Preview
 
-```bash
-npm run reset-project
-```
+`eas build --platform android --profile preview --local`
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+#### Build de Production
 
-## Learn more
+`eas build --platform android --profile production --local`
 
-To learn more about developing your project with Expo, look at the following resources:
+### iOS
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Para buildar o app em um dispositivo iOS rode: `npx expo run:ios`
