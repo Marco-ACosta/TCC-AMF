@@ -1,19 +1,10 @@
-import { JSX } from "react"
-import AuthContextComponent from "@/contexts/AuthContext"
-import ExampleContextComponent from "@/contexts/ExampleContext"
+import ExampleContextComponent from "@/contexts/ExampleContext";
+import { JSX } from "react";
 
 type GlobalProviderProps = {
-    children: JSX.Element | JSX.Element[]
-}
+  children: JSX.Element | JSX.Element[];
+};
 
-export default function GlobalProvider({
-    children,
-}: GlobalProviderProps) {
-    return (
-        <ExampleContextComponent>
-            <AuthContextComponent>
-                { children }
-            </AuthContextComponent>
-        </ExampleContextComponent>
-    )
+export default function GlobalProvider({ children }: GlobalProviderProps) {
+  return <ExampleContextComponent>{children}</ExampleContextComponent>;
 }

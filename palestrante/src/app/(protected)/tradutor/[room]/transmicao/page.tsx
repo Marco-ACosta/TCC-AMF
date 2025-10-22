@@ -1,201 +1,471 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Screen from "@/components/base/Screen";
 import Box from "@/components/base/Box";
 import io, { Socket } from "socket.io-client";
 import env from "@/config/env";
 import RoomService from "@/services/api/roomService";
 import { LocalStorage } from "@/storage/LocalStorage";
-import { RoomDetails, LangPair, MemberMeta, OfferPayload } from "@/types/room";
-import { Paper, Typography } from "@mui/material";
+import {
+  RoomDetails,
+  Translator,
+  MemberMeta,
+  RoomInfoPayload,
+} from "@/types/room";
+import { Button, Paper, Typography, Chip, Stack } from "@mui/material";
 
 const iceServers: RTCIceServer[] = [];
 
-export default function TranslatorPage({
-  params,
-}: {
-  params: { room: string };
-}) {
+type PeerKey = string | number;
+
+export default function RelayPage({ params }: { params: { room: string } }) {
   const roomCode = params.room;
-  const meId = LocalStorage.userId.get();
+  const meId = LocalStorage.userId.get() ?? null;
 
   const socketRef = useRef<Socket | null>(null);
 
-  const pcsRef = useRef<Map<string | number, RTCPeerConnection>>(new Map());
-  const peerRoomRef = useRef<Map<string | number, string>>(new Map());
-  const joinedRoomsRef = useRef<Set<string>>(new Set());
+  const joinedSrcRoomRef = useRef<string>("");
+  const joinedTgtRoomRef = useRef<string>("");
 
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const meterStartedRef = useRef(false);
+  const upstreamPcRef = useRef<RTCPeerConnection | null>(null);
+  const upstreamPeerIdRef = useRef<PeerKey | null>(null);
+
+  const dsPcsRef = useRef<Map<PeerKey, RTCPeerConnection>>(new Map());
+  const dsConnectedRef = useRef<Set<PeerKey>>(new Set());
+  const dsIceQueueRef = useRef<Map<PeerKey, RTCIceCandidateInit[]>>(new Map());
+  const dsPeerReadyRef = useRef<Set<PeerKey>>(new Set());
+
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micTrackRef = useRef<MediaStreamTrack | null>(null);
+
+  const monitorAudioRef = useRef<HTMLAudioElement | null>(null);
+  const monitorStreamRef = useRef<MediaStream | null>(null);
+  const [monitorEnabled, setMonitorEnabled] = useState(false);
+  const [rxLevel, setRxLevel] = useState(0);
+  const rxMeterRAF = useRef<number | null>(null);
+
+  const dsCtxRef = useRef<AudioContext | null>(null);
+  const dsMetersRef = useRef<
+    Map<
+      PeerKey,
+      {
+        source: MediaStreamAudioSourceNode;
+        analyser: AnalyserNode;
+        data: Uint8Array;
+        raf: number | null;
+      }
+    >
+  >(new Map());
+  const [dsLevels, setDsLevels] = useState<Record<string, number>>({});
 
   const [details, setDetails] = useState<RoomDetails | null>(null);
-  const [rxLevel, setRxLevel] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [autoSrc, setAutoSrc] = useState<string>("");
+  const [autoTgt, setAutoTgt] = useState<string>("");
 
-  const subRoomOf = useCallback(
-    (src: string) => (src ? `${roomCode}::${src}` : roomCode),
-    [roomCode]
+  const membersRef = useRef<MemberMeta[]>([]);
+  const dialTimerRef = useRef<number | null>(null);
+
+  const computeAutoSrc = useCallback((d: RoomDetails | null) => {
+    if (!d) return "";
+    const speakerCodes = new Set(
+      (d.speakers ?? []).flatMap((s) =>
+        (s.languages ?? []).map((l) => l.code).filter(Boolean)
+      ) as string[]
+    );
+    const unique = Array.from(speakerCodes);
+    if (unique.length === 1) return unique[0]!;
+
+    const cov = new Map<string, number>();
+    const translators = (d.translators ?? []) as Translator[];
+    for (const t of translators) {
+      for (const p of t.pairs ?? []) {
+        const c = p?.source?.code;
+        if (!c) continue;
+        cov.set(c, (cov.get(c) ?? 0) + 1);
+      }
+    }
+
+    let best = "";
+    let bestScore = -1;
+    for (const code of unique) {
+      const score = cov.get(code) ?? 0;
+      if (score > bestScore) {
+        best = code;
+        bestScore = score;
+      }
+    }
+    if (!best && cov.size) {
+      cov.forEach((score, code) => {
+        if (score > bestScore) {
+          best = code;
+          bestScore = score;
+        }
+      });
+    }
+    return best;
+  }, []);
+
+  const computeAutoTgt = useCallback((d: RoomDetails | null, src: string) => {
+    if (!d) return "";
+    const counts = new Map<string, number>();
+    (d.translators ?? []).forEach((t) =>
+      (t.pairs ?? []).forEach((p) => {
+        const s = p?.source?.code;
+        const tcode = p?.target?.code;
+        if (s === src && tcode) {
+          counts.set(tcode, (counts.get(tcode) ?? 0) + 1);
+        }
+      })
+    );
+    let best = "";
+    let bestScore = -1;
+    counts.forEach((v, k) => {
+      if (v > bestScore) {
+        best = k;
+        bestScore = v;
+      }
+    });
+    if (!best) {
+      for (const t of d.translators ?? []) {
+        for (const p of t.pairs ?? []) {
+          if (p?.target?.code) return p.target.code;
+        }
+      }
+    }
+    return best;
+  }, []);
+
+  const joinLangRooms = useCallback(
+    (src: string, tgt: string) => {
+      if (!socketRef.current) return;
+
+      if (joinedSrcRoomRef.current) {
+        try {
+          socketRef.current.emit("leave", { room: joinedSrcRoomRef.current });
+        } catch {}
+      }
+      if (joinedTgtRoomRef.current) {
+        try {
+          socketRef.current.emit("leave", { room: joinedTgtRoomRef.current });
+        } catch {}
+      }
+
+      dsPcsRef.current.forEach((pc) => pc.close());
+      dsPcsRef.current.clear();
+      dsConnectedRef.current.clear();
+      dsPeerReadyRef.current.clear();
+      dsIceQueueRef.current.clear();
+
+      dsMetersRef.current.forEach((m, key) => {
+        if (m.raf) cancelAnimationFrame(m.raf);
+        try {
+          m.source.disconnect();
+          m.analyser.disconnect();
+        } catch {}
+        dsMetersRef.current.delete(key);
+      });
+      setDsLevels({});
+
+      try {
+        upstreamPcRef.current?.close?.();
+      } catch {}
+      upstreamPcRef.current = null;
+      upstreamPeerIdRef.current = null;
+
+      stopMonitor();
+
+      const srcRoom = src ? `${roomCode}::${src}` : roomCode;
+      socketRef.current.emit("join", {
+        room: srcRoom,
+        role: "relay",
+        id: meId ?? undefined,
+        src,
+      } as MemberMeta);
+      joinedSrcRoomRef.current = srcRoom;
+
+      const tgtRoom = tgt ? `${roomCode}::${tgt}` : roomCode;
+      socketRef.current.emit("join", {
+        room: tgtRoom,
+        role: "relay",
+        id: meId ?? undefined,
+        tgt,
+      } as MemberMeta);
+      joinedTgtRoomRef.current = tgtRoom;
+    },
+    [meId, roomCode]
   );
 
-  const startMeter = useCallback((stream: MediaStream) => {
-    if (meterStartedRef.current) return;
+  const ensureMic = useCallback(async () => {
+    if (micStreamRef.current && micTrackRef.current)
+      return micStreamRef.current;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      } as MediaTrackConstraints,
+      video: false,
+    });
+    micStreamRef.current = stream;
+    micTrackRef.current = stream.getAudioTracks()[0] ?? null;
+    return stream;
+  }, []);
+
+  function startMonitor(stream: MediaStream) {
+    monitorStreamRef.current = stream;
+    const el = monitorAudioRef.current;
+    if (el) {
+      el.srcObject = stream;
+      if (monitorEnabled) {
+        el.play().catch(() => {});
+      }
+    }
     try {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
-      const ctx = audioCtxRef.current!;
-      const src = ctx.createMediaStreamSource(stream);
+      const Ctx =
+        (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new Ctx();
+      const srcNode = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
-      src.connect(analyser);
-      analyserRef.current = analyser;
-
+      srcNode.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
+      const loop = () => {
         analyser.getByteTimeDomainData(data);
         let sum = 0;
         for (let i = 0; i < data.length; i++) {
           const v = (data[i] - 128) / 128;
           sum += v * v;
         }
-        setRxLevel(Math.sqrt(sum / data.length));
-        rafRef.current = requestAnimationFrame(tick);
+        const level = Math.sqrt(sum / data.length);
+        setRxLevel(level);
+        rxMeterRAF.current = requestAnimationFrame(loop);
       };
-      meterStartedRef.current = true;
-      rafRef.current = requestAnimationFrame(tick);
+      rxMeterRAF.current = requestAnimationFrame(loop);
     } catch {}
-  }, []);
-
-  const stopMeter = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    meterStartedRef.current = false;
+  }
+  function stopMonitor() {
+    if (rxMeterRAF.current) cancelAnimationFrame(rxMeterRAF.current);
+    rxMeterRAF.current = null;
     setRxLevel(0);
     try {
-      analyserRef.current?.disconnect();
+      if (monitorAudioRef.current) {
+        monitorAudioRef.current.pause();
+        (monitorAudioRef.current as any).srcObject = null;
+      }
     } catch {}
-    analyserRef.current = null;
-  }, []);
+    const s = monitorStreamRef.current;
+    if (s) s.getTracks().forEach((t) => t.stop());
+    monitorStreamRef.current = null;
+  }
+  function toggleMonitor() {
+    const next = !monitorEnabled;
+    setMonitorEnabled(next);
+    const el = monitorAudioRef.current;
+    if (!el) return;
+    if (next) el.play().catch(() => {});
+    else el.pause();
+  }
 
-  const getOrCreatePC = useCallback(
-    (peerId: string | number) => {
-      let pc = pcsRef.current.get(peerId);
+  function startDownstreamMeter(peerKey: PeerKey, stream: MediaStream) {
+    try {
+      const Ctx =
+        (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!dsCtxRef.current) dsCtxRef.current = new Ctx();
+      const ctx = dsCtxRef.current!;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+
+      const loop = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        const level = Math.sqrt(sum / data.length);
+        setDsLevels((prev) => ({ ...prev, [String(peerKey)]: level }));
+        const entry = dsMetersRef.current.get(peerKey);
+        if (entry) entry.raf = requestAnimationFrame(loop);
+      };
+
+      dsMetersRef.current.set(peerKey, {
+        source,
+        analyser,
+        data,
+        raf: requestAnimationFrame(loop),
+      });
+    } catch {}
+  }
+  function stopDownstreamMeter(peerKey: PeerKey) {
+    const m = dsMetersRef.current.get(peerKey);
+    if (!m) return;
+    if (m.raf) cancelAnimationFrame(m.raf);
+    try {
+      m.source.disconnect();
+      m.analyser.disconnect();
+    } catch {}
+    dsMetersRef.current.delete(peerKey);
+    setDsLevels((prev) => {
+      const copy = { ...prev };
+      delete copy[String(peerKey)];
+      return copy;
+    });
+  }
+
+  const ensureUpstreamPc = useCallback(() => {
+    if (upstreamPcRef.current) return upstreamPcRef.current;
+    const pc = new RTCPeerConnection({ iceServers });
+    upstreamPcRef.current = pc;
+
+    try {
+      pc.addTransceiver?.("audio", { direction: "recvonly" });
+    } catch {}
+
+    pc.onicecandidate = (evt) => {
+      if (!evt.candidate || upstreamPeerIdRef.current == null) return;
+      const cand = evt.candidate.toJSON?.() ?? evt.candidate;
+      socketRef.current?.emit("ice-candidate", {
+        room: joinedSrcRoomRef.current || roomCode,
+        to: upstreamPeerIdRef.current,
+        candidate: cand,
+      });
+    };
+
+    pc.ontrack = (ev) => {
+      const track = ev.track;
+      if (!track) return;
+      const remoteStream = new MediaStream([track]);
+      startMonitor(remoteStream);
+    };
+
+    pc.onconnectionstatechange = () => {
+      const st = pc.connectionState;
+      if (st === "failed" || st === "disconnected" || st === "closed") {
+        try {
+          pc.close();
+        } catch {}
+        upstreamPcRef.current = null;
+        upstreamPeerIdRef.current = null;
+        stopMonitor();
+      }
+    };
+
+    return pc;
+  }, [roomCode]);
+
+  const getOrCreateDownstreamPc = useCallback(
+    (peerKey: PeerKey) => {
+      let pc = dsPcsRef.current.get(peerKey);
       if (pc) return pc;
 
       pc = new RTCPeerConnection({ iceServers });
-      pcsRef.current.set(peerId, pc);
-
-      try {
-        if (pc.getTransceivers().length === 0) {
-          pc.addTransceiver("audio", { direction: "recvonly" });
-        }
-      } catch {}
+      dsPcsRef.current.set(peerKey, pc);
 
       pc.onicecandidate = (evt) => {
         if (!evt.candidate) return;
-        const room = peerRoomRef.current.get(peerId) || roomCode;
+        const cand = evt.candidate.toJSON?.() ?? evt.candidate;
+        if (!dsPeerReadyRef.current.has(peerKey)) {
+          const q = dsIceQueueRef.current.get(peerKey) ?? [];
+          q.push(cand);
+          dsIceQueueRef.current.set(peerKey, q);
+          return;
+        }
         socketRef.current?.emit("ice-candidate", {
-          room,
-          to: peerId,
-          candidate: evt.candidate.toJSON(),
+          room: joinedTgtRoomRef.current || roomCode,
+          to: peerKey,
+          candidate: cand,
         });
-      };
-
-      pc.ontrack = (evt) => {
-        const track = evt.track;
-        const stream =
-          (evt.streams && evt.streams[0]) || new MediaStream([track]);
-        attachStream(stream);
-        startMeter(stream);
       };
 
       pc.onconnectionstatechange = () => {
         const st = pc.connectionState;
-        if (st === "failed" || st === "closed") {
-          pcsRef.current.delete(peerId);
-          peerRoomRef.current.delete(peerId);
+        if (st === "failed" || st === "disconnected" || st === "closed") {
+          try {
+            pc.close();
+          } catch {}
+          dsPcsRef.current.delete(peerKey);
+          dsConnectedRef.current.delete(peerKey);
+          dsPeerReadyRef.current.delete(peerKey);
+          dsIceQueueRef.current.delete(peerKey);
+          stopDownstreamMeter(peerKey);
         }
+        if (st === "connected") dsConnectedRef.current.add(peerKey);
       };
 
       return pc;
     },
-    [roomCode, startMeter]
+    [roomCode]
   );
 
-  const applyRemoteOfferAndAnswer = useCallback(
-    async (pc: RTCPeerConnection, sdp: string) => {
-      if (pc.signalingState === "have-local-offer") {
-        try {
-          await pc.setLocalDescription({ type: "rollback" } as any);
-        } catch {}
-      }
-      if (pc.signalingState !== "have-remote-offer") {
-        await pc.setRemoteDescription({ type: "offer", sdp });
-      }
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      return answer;
+  const callUser = useCallback(
+    async (target: MemberMeta) => {
+      if (!joinedTgtRoomRef.current) return;
+
+      const peerKey: PeerKey = (target.sid as any) ?? target.id;
+      if (dsConnectedRef.current.has(peerKey)) return;
+
+      try {
+        const mic = await ensureMic();
+        const micTrack = mic.getAudioTracks()[0];
+        if (!micTrack) return;
+
+        const pc = getOrCreateDownstreamPc(peerKey);
+
+        const existing = pc
+          .getSenders()
+          .find((s) => s.track && s.track.kind === "audio");
+        if (existing) {
+          await existing.replaceTrack(micTrack);
+        } else {
+          const outStream = new MediaStream([micTrack]);
+          pc.addTrack(micTrack, outStream);
+          startDownstreamMeter(peerKey, outStream);
+        }
+
+        const offer = await pc.createOffer({ offerToReceiveAudio: false });
+        await pc.setLocalDescription(offer);
+
+        socketRef.current?.emit("offer", {
+          room: joinedTgtRoomRef.current,
+          to: peerKey,
+          sdp: offer.sdp,
+          type: offer.type,
+          meta: {
+            tgt: autoTgt,
+            from_role: "relay",
+            me: { id: meId },
+          },
+        });
+      } catch {}
     },
-    []
+    [autoTgt, ensureMic, getOrCreateDownstreamPc, meId]
   );
 
-  const attachStream = useCallback((stream: MediaStream) => {
-    const el = remoteAudioRef.current;
-    if (!el) return;
-
-    const cur = (el as any).srcObject as MediaStream | null;
-    if (cur !== stream) {
-      (el as any).srcObject = stream;
-      el.load?.();
-    }
-
-    el.muted = false;
-    el.volume = 1.0;
-    el.play().catch(() => {});
-  }, []);
+  const dialEligibleUsers = useCallback(() => {
+    const users = (membersRef.current || []).filter((m) => m.role === "user");
+    users.forEach((m) => callUser(m));
+  }, [callUser]);
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        setError(null);
-
         const d = (await RoomService.GetRoom(roomCode)).Data as RoomDetails;
         if (!alive) return;
         setDetails(d);
 
-        const me = (d.translators ?? []).find(
-          (t: any) =>
-            String(t.id) === String(meId) || String(t.user_id) === String(meId)
-        );
+        const chosenSrc = computeAutoSrc(d);
+        setAutoSrc(chosenSrc);
 
-        const roomSources = Array.from(
-          new Set(
-            [
-              ...(d.translators ?? []).flatMap((t: any) =>
-                (t.pairs ?? []).map((p: any) => p?.source?.code)
-              ),
-              ...(d.speakers ?? []).flatMap((s: any) =>
-                (s.languages ?? []).map((l: any) => l?.code)
-              ),
-            ].filter(Boolean)
-          )
-        );
-
-        const sources: string[] = Array.from(
-          new Set(
-            ((me?.pairs ?? []) as LangPair[])
-              .map((p) => p?.source?.code)
-              .filter(Boolean) as string[]
-          )
-        );
-        if (sources.length === 0 && roomSources.length > 0) {
-          sources.push(...roomSources);
-        }
+        const chosenTgt = computeAutoTgt(d, chosenSrc);
+        setAutoTgt(chosenTgt);
 
         const socket = io(env.SignalingURL(), {
           transports: ["websocket", "polling"],
@@ -204,129 +474,202 @@ export default function TranslatorPage({
         });
         socketRef.current = socket;
 
-        socket.on("offer", async (payload: OfferPayload) => {
+        socket.on("room-info", (payload: RoomInfoPayload) => {
+          if (!alive) return;
+          const list = Array.isArray(payload?.members) ? payload!.members! : [];
+          membersRef.current = list;
+          dialEligibleUsers();
+        });
+
+        socket.on("offer", async ({ from, sdp, meta }) => {
+          if (!alive) return;
           try {
-            const { from, sdp, meta } = payload || {};
-            const src = meta?.src || "";
-            const room = src ? subRoomOf(src) : roomCode;
-            if (!sdp) return;
+            if (!from || !sdp) return;
+            const fromRole =
+              meta?.from_role ?? meta?.role ?? meta?.senderRole ?? "";
+            const src = meta?.src ?? meta?.source ?? "";
+            if (fromRole !== "speaker") return;
+            if (autoSrc && src && src !== autoSrc) return;
 
-            const pc = getOrCreatePC(from);
-            peerRoomRef.current.set(from, room);
+            upstreamPeerIdRef.current = from;
+            const pc = ensureUpstreamPc();
 
-            const answer = await applyRemoteOfferAndAnswer(pc, sdp);
+            if (pc.signalingState === "have-local-offer") {
+              try {
+                await pc.setLocalDescription({ type: "rollback" } as any);
+              } catch {}
+            }
+            if (pc.signalingState !== "have-remote-offer") {
+              await pc.setRemoteDescription({ type: "offer", sdp } as any);
+            }
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
 
             socket.emit("answer", {
-              room,
+              room: joinedSrcRoomRef.current || roomCode,
               to: from,
-              sdp: answer.sdp,
-              type: answer.type,
-              meta: { from_role: "translator", me: { id: meId } },
+              sdp: pc.localDescription?.sdp || "",
+              type: pc.localDescription?.type || "answer",
+              meta: { from_role: "relay", me: { id: meId }, src: autoSrc },
             });
           } catch {}
         });
 
-        socket.on("ice-candidate", async ({ from, candidate }) => {
-          const pc = pcsRef.current.get(from);
-          if (!pc || !candidate) return;
+        socket.on("answer", async ({ from, sdp, type }) => {
+          const pc = dsPcsRef.current.get(from);
+          if (!pc) return;
           try {
-            await pc.addIceCandidate(candidate);
+            await pc.setRemoteDescription({ sdp, type });
+            dsPeerReadyRef.current.add(from);
+            const q = dsIceQueueRef.current.get(from) ?? [];
+            for (const cand of q) {
+              socketRef.current?.emit("ice-candidate", {
+                room: joinedTgtRoomRef.current || roomCode,
+                to: from,
+                candidate: cand,
+              });
+            }
+            dsIceQueueRef.current.delete(from);
+          } catch {}
+        });
+
+        socket.on("ice-candidate", async ({ from, candidate }) => {
+          if (!candidate) return;
+          if (from != null && from === upstreamPeerIdRef.current) {
+            const pc = upstreamPcRef.current;
+            if (!pc) return;
+            try {
+              await pc.addIceCandidate(candidate);
+            } catch {}
+            return;
+          }
+          const dpc = dsPcsRef.current.get(from);
+          if (!dpc) return;
+          try {
+            await dpc.addIceCandidate(candidate);
           } catch {}
         });
 
         socket.on("bye", ({ from }) => {
-          const pc = pcsRef.current.get(from);
-          if (pc) {
+          if (from != null && from === upstreamPeerIdRef.current) {
             try {
-              pc.close();
+              upstreamPcRef.current?.close?.();
             } catch {}
-            pcsRef.current.delete(from);
-            peerRoomRef.current.delete(from);
+            upstreamPcRef.current = null;
+            upstreamPeerIdRef.current = null;
+            stopMonitor();
+            return;
+          }
+          const dpc = dsPcsRef.current.get(from);
+          if (dpc) {
+            try {
+              dpc.close();
+            } catch {}
+            dsPcsRef.current.delete(from);
+            dsConnectedRef.current.delete(from);
+            dsPeerReadyRef.current.delete(from);
+            dsIceQueueRef.current.delete(from);
+            stopDownstreamMeter(from);
           }
         });
 
-        if (sources.length === 0) {
-          socket.emit("join", {
-            room: roomCode,
-            role: "translator",
-            id: meId,
-          } as MemberMeta);
-          joinedRoomsRef.current.add(roomCode);
-        } else {
-          for (const src of sources) {
-            const room = subRoomOf(src);
-            if (!joinedRoomsRef.current.has(room)) {
-              socket.emit("join", {
-                room,
-                role: "translator",
-                id: meId,
-                src,
-                pairs: (me?.pairs ?? []).map((p) => ({
-                  source: { code: p?.source?.code },
-                  target: { code: p?.target?.code },
-                })),
-              } as MemberMeta);
-              joinedRoomsRef.current.add(room);
-            }
-          }
-        }
-      } catch (e: any) {
-        if (alive) setError(e?.message ?? "Falha ao conectar.");
-      }
+        joinLangRooms(chosenSrc, chosenTgt);
+      } catch {}
     })();
 
     return () => {
       alive = false;
 
       try {
-        const rooms = Array.from(joinedRoomsRef.current.values());
-        for (const r of rooms) socketRef.current?.emit("leave", { room: r });
+        if (joinedSrcRoomRef.current)
+          socketRef.current?.emit("leave", { room: joinedSrcRoomRef.current });
+        if (joinedTgtRoomRef.current)
+          socketRef.current?.emit("leave", { room: joinedTgtRoomRef.current });
+        else socketRef.current?.emit("leave", { room: roomCode });
       } catch {}
 
       socketRef.current?.disconnect();
       socketRef.current = null;
 
-      pcsRef.current.forEach((pc) => {
+      if (dialTimerRef.current) {
+        clearInterval(dialTimerRef.current);
+        dialTimerRef.current = null;
+      }
+
+      try {
+        upstreamPcRef.current?.close?.();
+      } catch {}
+      upstreamPcRef.current = null;
+      upstreamPeerIdRef.current = null;
+
+      dsPcsRef.current.forEach((pc, key) => {
         try {
           pc.close();
         } catch {}
+        stopDownstreamMeter(key);
       });
-      pcsRef.current.clear();
-      peerRoomRef.current.clear();
+      dsPcsRef.current.clear();
+      dsConnectedRef.current.clear();
+      dsPeerReadyRef.current.clear();
+      dsIceQueueRef.current.clear();
 
-      stopMeter();
+      stopMonitor();
+
       try {
-        audioCtxRef.current?.close();
+        dsCtxRef.current?.close();
       } catch {}
-      audioCtxRef.current = null;
+      dsCtxRef.current = null;
 
-      joinedRoomsRef.current.clear();
+      const mic = micStreamRef.current;
+      if (mic) mic.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+      micTrackRef.current = null;
     };
   }, [
+    computeAutoSrc,
+    computeAutoTgt,
+    joinLangRooms,
+    ensureUpstreamPc,
     roomCode,
     meId,
-    getOrCreatePC,
-    stopMeter,
-    subRoomOf,
-    applyRemoteOfferAndAnswer,
+    autoSrc,
   ]);
+
+  const txMaxLevel = useMemo(
+    () =>
+      Object.values(dsLevels).length ? Math.max(...Object.values(dsLevels)) : 0,
+    [dsLevels]
+  );
+
+  const userPeers = (membersRef.current || []).filter((m) => m.role === "user");
 
   return (
     <Screen>
       <Box.Column style={{ gap: 16 }}>
-        <Typography variant="h2">Sala: {details?.name ?? roomCode}</Typography>
+        <Typography variant="h2">{details?.name ?? roomCode}</Typography>
+
         <Paper
           style={{
+            padding: 12,
             display: "flex",
             gap: 12,
             alignItems: "center",
             flexWrap: "wrap",
           }}>
-          <Typography variant="body1">
-            Volume: <strong>{rxLevel.toFixed(3)}</strong>
+          <Typography variant="body2">
+            Volume de entrada: <strong>{rxLevel.toFixed(3)}</strong>
+          </Typography>
+          <Button size="small" variant="outlined" onClick={toggleMonitor}>
+            {monitorEnabled ? "Mutar palestrante" : "Ouvir palestrante"}
+          </Button>
+          <audio ref={monitorAudioRef} autoPlay playsInline />
+        </Paper>
+
+        <Paper style={{ padding: 12 }}>
+          <Typography variant="body2">
+            Volume de saida: <strong>{txMaxLevel.toFixed(3)}</strong>
           </Typography>
         </Paper>
-        <audio ref={remoteAudioRef} autoPlay playsInline />
       </Box.Column>
     </Screen>
   );

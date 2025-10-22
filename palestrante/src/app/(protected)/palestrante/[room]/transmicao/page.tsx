@@ -17,18 +17,18 @@ import { Paper, Typography } from "@mui/material";
 
 const iceServers: RTCIceServer[] = [];
 
+type PeerKey = string | number;
+
 export default function SpeakerPage({ params }: { params: { room: string } }) {
   const roomCode = params.room;
   const meId = LocalStorage.userId.get() ?? null;
 
   const socketRef = useRef<Socket | null>(null);
 
-  const pcsRef = useRef<Map<string | number, RTCPeerConnection>>(new Map());
-  const connectedPeersRef = useRef<Set<string | number>>(new Set());
-  const iceQueueRef = useRef<Map<string | number, RTCIceCandidateInit[]>>(
-    new Map()
-  );
-  const peerReadyRef = useRef<Set<string | number>>(new Set());
+  const pcsRef = useRef<Map<PeerKey, RTCPeerConnection>>(new Map());
+  const connectedPeersRef = useRef<Set<PeerKey>>(new Set());
+  const iceQueueRef = useRef<Map<PeerKey, RTCIceCandidateInit[]>>(new Map());
+  const peerReadyRef = useRef<Set<PeerKey>>(new Set());
 
   const micStreamRef = useRef<MediaStream | null>(null);
 
@@ -81,7 +81,7 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
   const getPeerKey = (m: Pick<MemberMeta, "id" | "sid">) => m.sid ?? m.id;
 
   const getOrCreatePC = useCallback(
-    (peerKey: string | number) => {
+    (peerKey: PeerKey) => {
       let pc = pcsRef.current.get(peerKey);
       if (pc) return pc;
 
@@ -90,7 +90,7 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
 
       pc.onicecandidate = (evt) => {
         if (!evt.candidate) return;
-        const cand = evt.candidate.toJSON();
+        const cand = evt.candidate.toJSON?.() ?? evt.candidate;
         if (!peerReadyRef.current.has(peerKey)) {
           const q = iceQueueRef.current.get(peerKey) ?? [];
           q.push(cand);
@@ -107,6 +107,9 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
       pc.onconnectionstatechange = () => {
         const st = pc.connectionState;
         if (st === "failed" || st === "disconnected" || st === "closed") {
+          try {
+            pc.close();
+          } catch {}
           pcsRef.current.delete(peerKey);
           connectedPeersRef.current.delete(peerKey);
           peerReadyRef.current.delete(peerKey);
@@ -120,7 +123,7 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
     [roomCode]
   );
 
-  const callTranslator = useCallback(
+  const callReceiver = useCallback(
     async (target: MemberMeta) => {
       if (!joinedSubRoomRef.current) return;
       const peerKey = getPeerKey(target);
@@ -130,9 +133,6 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         const pc = getOrCreatePC(peerKey);
 
         const mic = await ensureMic();
-        const track = mic.getAudioTracks()[0];
-        if (!track) return;
-
         const hasAudio = pc.getSenders().some((s) => s.track?.kind === "audio");
         if (!hasAudio) mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
 
@@ -155,17 +155,21 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
     [ensureMic, getOrCreatePC, meId, autoSrc]
   );
 
-  const dialEligibleTranslators = useCallback(() => {
+  const dialEligibleReceivers = useCallback(() => {
     if (!joinedSubRoomRef.current) return;
-    const list = (membersRef.current || []).filter(
-      (m) => m.role === "translator"
+    const list = membersRef.current || [];
+
+    const relays = list.filter((m) => m.role === "relay");
+    const usersOriginal = list.filter(
+      (m) => m.role === "user" && (m.tgt === autoSrc || (!m.tgt && autoSrc))
     );
-    if (!list.length) return;
-    list.forEach((m) => {
+
+    const targets = [...relays, ...usersOriginal];
+    targets.forEach((m) => {
       const key = getPeerKey(m);
-      if (!connectedPeersRef.current.has(key)) callTranslator(m);
+      if (!connectedPeersRef.current.has(key)) callReceiver(m);
     });
-  }, [callTranslator]);
+  }, [callReceiver, autoSrc]);
 
   const computeAutoSrc = useCallback((d: RoomDetails | null) => {
     if (!d) return "";
@@ -218,9 +222,7 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         } catch {}
       }
 
-      pcsRef.current.forEach((pc) => {
-        pc.close();
-      });
+      pcsRef.current.forEach((pc) => pc.close());
       pcsRef.current.clear();
       connectedPeersRef.current.clear();
       peerReadyRef.current.clear();
@@ -230,12 +232,11 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         room: target,
         role: "speaker",
         id: meId ?? undefined,
-        pairs: [],
         src,
       } as MemberMeta);
       joinedSubRoomRef.current = target;
 
-      setTimeout(() => dialEligibleTranslators(), 300);
+      setTimeout(() => dialEligibleReceivers(), 250);
       if (!dialTimerRef.current) {
         dialTimerRef.current = window.setInterval(() => {
           if (connectedPeersRef.current.size > 0) {
@@ -243,11 +244,11 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
             dialTimerRef.current = null;
             return;
           }
-          dialEligibleTranslators();
-        }, 1500);
+          dialEligibleReceivers();
+        }, 1200);
       }
     },
-    [dialEligibleTranslators, meId, roomCode]
+    [dialEligibleReceivers, meId, roomCode]
   );
 
   useEffect(() => {
@@ -271,9 +272,9 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
 
         socket.on("room-info", (payload: RoomInfoPayload) => {
           if (!alive) return;
-          const list = Array.isArray(payload?.members) ? payload!.members! : [];
+          const list = Array.isArray(payload?.members) ? payload.members! : [];
           membersRef.current = list;
-          dialEligibleTranslators();
+          dialEligibleReceivers();
         });
 
         socket.on("answer", async ({ from, sdp, type }) => {
@@ -303,7 +304,9 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         socket.on("bye", ({ from }) => {
           const pc = pcsRef.current.get(from);
           if (pc) {
-            pc.close();
+            try {
+              pc.close();
+            } catch {}
             pcsRef.current.delete(from);
             connectedPeersRef.current.delete(from);
             peerReadyRef.current.delete(from);
@@ -350,7 +353,7 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
       if (mic) mic.getTracks().forEach((t) => t.stop());
       micStreamRef.current = null;
     };
-  }, [computeAutoSrc, dialEligibleTranslators, joinSubRoom, roomCode, meId]);
+  }, [computeAutoSrc, dialEligibleReceivers, joinSubRoom, roomCode, meId]);
 
   return (
     <Screen>
@@ -362,9 +365,10 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
             gap: 12,
             alignItems: "center",
             flexWrap: "wrap",
+            padding: 12,
           }}>
-          <Typography variant="body1">
-            Volume: <strong>{micLevel.toFixed(3)}</strong>{" "}
+          <Typography variant="body2">
+            Volume de saida: <strong>{micLevel.toFixed(3)}</strong>
           </Typography>
         </Paper>
       </Box.Column>

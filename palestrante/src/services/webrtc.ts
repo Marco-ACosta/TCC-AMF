@@ -1,7 +1,7 @@
 import { io, Socket } from "socket.io-client";
+import env from "@/config/env";
 
-const SIGNALING_SERVER_URL =
-  process.env.NEXT_PUBLIC_SIGNALING_URL || "http://localhost:5001";
+const SIGNALING_SERVER_URL = env.SignalingURL();
 
 export class WebRTCClient {
   private pc: RTCPeerConnection;
@@ -88,4 +88,3 @@ export class WebRTCClient {
     this.socket.emit("offer", { room: this.room, offer });
   }
 }
-

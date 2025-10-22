@@ -40,9 +40,10 @@ export type IceServer = {
 export type MemberMeta = {
   id: string | number;
   sid?: string;
-  role?: "translator" | "speaker" | "admin" | "user";
+  role?: "translator" | "speaker" | "admin" | "user" | "relay";
   pairs?: Array<{ source?: { code?: string }; target?: { code?: string } }>;
   src?: string;
+  tgt?: string;
 };
 
 export type OfferPayload = {
