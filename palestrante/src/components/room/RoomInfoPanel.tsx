@@ -62,20 +62,7 @@ export default function RoomInfoPanel({
               gap: 12,
               alignItems: "center",
               flexWrap: "wrap",
-            }}>
-            <InfoRow label="Código da sala" value={details?.code} />
-            <Tooltip title="Copiar código">
-              <span>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => details?.code && onCopyCode?.(details.code)}
-                  disabled={!details?.code}>
-                  Copiar
-                </Button>
-              </span>
-            </Tooltip>
-          </div>
+            }}></div>
           <div>
             <Typography variant="body2" sx={{ opacity: 0.7, mb: 0.5 }}>
               Descrição
