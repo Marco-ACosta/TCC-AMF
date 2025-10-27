@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, List
 from db_core.http.cors import setup_cors
-from flask import Flask, g, jsonify, Blueprint
+from flask import Flask, g, jsonify, Blueprint, request
 from db.session import SessionLocal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from db_core.auth import auth_required
@@ -50,6 +50,29 @@ def _extract_languages(links, attr_name="language"):
         if sl:
             out.append(sl)
     return out
+
+def _serialize_user(u: User):
+    tr = getattr(u, "translator", None)
+    sp = getattr(u, "speaker", None)
+    return {
+        "id": u.id,
+        "name": getattr(u, "name", None),
+        "email": getattr(u, "email", None),
+        "is_admin": getattr(u, "is_admin", False),
+        "is_translator": getattr(u, "is_translator", False),
+        "is_speaker": getattr(u, "is_speaker", False),
+        "created_at": getattr(u, "created_at", None),
+        "updated_at": getattr(u, "updated_at", None),
+        "translator": None if not tr else {
+            "id": tr.id,
+            "languages": _extract_languages(tr.language_translators),
+        },
+        "speaker": None if not sp else {
+            "id": sp.id,
+            "bio": getattr(sp, "bio", None),
+            "languages": _extract_languages(sp.language_speakers),
+        },
+    }
 
 class UserType(str, Enum):
     SPEAKER = "speaker"
@@ -230,6 +253,7 @@ def create_app():
         if speaker:
             resp["speaker"] = {
                 "id": speaker.id,
+                "bio": speaker.bio,
                 "user_id": speaker.user_id,
                 "created_at": speaker.created_at,
                 "updated_at": speaker.updated_at,
@@ -449,7 +473,7 @@ def create_app():
     @auth_required(roles_any=["admin"])
     def list_user():
         session = g.db
-        users = session.execute(
+        q = (
             session.query(User)
             .options(
                 selectinload(User.translator)
@@ -460,32 +484,166 @@ def create_app():
                     .selectinload(LanguageSpeaker.language),
             )
             .order_by(User.id.asc())
-        ).scalars().all()
+        )
 
-        def serialize_user(u: User):
-            tr = getattr(u, "translator", None)
-            sp = getattr(u, "speaker", None)
-            return {
-                "id": u.id,
-                "name": getattr(u, "name", None),
-                "email": getattr(u, "email", None),
-                "is_admin": getattr(u, "is_admin", False),
-                "is_translator": getattr(u, "is_translator", False) if hasattr(u, "is_translator") else (tr is not None),
-                "is_speaker": getattr(u, "is_speaker", False) if hasattr(u, "is_speaker") else (sp is not None),
-                "created_at": getattr(u, "created_at", None),
-                "updated_at": getattr(u, "updated_at", None),
-                "translator": None if not tr else {
-                    "id": tr.id,
-                    "languages": _extract_languages(tr.language_translators),
-                },
-                "speaker": None if not sp else {
-                    "id": sp.id,
-                    "bio": getattr(sp, "bio", None),
-                    "languages": _extract_languages(sp.language_speakers),
-                },
-            }
+        type_param = (request.args.get("type") or "").strip().lower()
+        if type_param:
+            if type_param == "translator":
+                q = q.filter(User.is_translator.is_(True))
+            elif type_param == "speaker":
+                q = q.filter(User.is_speaker.is_(True))
+            elif type_param == "admin":
+                q = q.filter(User.is_admin.is_(True))
+            else:
+                return jsonify({
+                    "error": "invalid_type",
+                    "message": "Parâmetro 'type' deve ser 'translator' ou 'speaker'.",
+                    "allowed": ["translator", "speaker"],
+                }), 400
 
-        return jsonify([serialize_user(u) for u in users]), 200
+        users = session.execute(q).scalars().all()
+
+        return jsonify([_serialize_user(u) for u in users]), 200
+
+    @bp.route("/<int:user_id>", methods=["PUT"], strict_slashes=False)
+    @auth_required()
+    @parse_body(UserUpdateSelf)
+    def update(user_id: int):
+        try:
+            current_user_id = int(user_id)
+        except (TypeError, ValueError):
+            return jsonify({"message": "invalid_token"}), 401
+
+        session = g.db
+        body = g.body.model_dump(exclude_unset=True)
+
+        user = session.execute(
+            session.query(User)
+            .options(
+                selectinload(User.translator)
+                    .selectinload(Translator.language_translators)
+                    .selectinload(LanguageTranslator.language),
+                selectinload(User.speaker)
+                    .selectinload(Speaker.language_speakers)
+                    .selectinload(LanguageSpeaker.language),
+            )
+            .where(User.id == current_user_id)
+        ).scalars().first()
+
+        if not user:
+            return jsonify({"message": "user_not_found"}), 404
+
+        if "name" in body:
+            user.name = body["name"]
+
+        if "email" in body:
+            new_email = body["email"]
+            exists_same = session.execute(
+                select(User.id).where(
+                    func.lower(User.email) == func.lower(new_email),
+                    User.id != user.id
+                ).limit(1)
+            ).scalar()
+            if exists_same:
+                return jsonify({"error": "email_in_use"}), 409
+            user.email = new_email
+
+        if "password" in body:
+            pwd = body["password"]
+            if not isinstance(pwd, str) or len(pwd) < 8:
+                return jsonify({"error": "invalid_password", "message": "min 8 chars"}), 400
+            user.password = hash_password(pwd)
+
+        if "bio" in body and user.speaker:
+            user.speaker.bio = body["bio"]
+
+        if "languages" in body:
+            lang_ids = body.get("languages") or []
+            lang_ids = list(dict.fromkeys(lang_ids))
+            if lang_ids:
+                found = set(session.execute(
+                    select(Language.id).where(Language.id.in_(lang_ids))
+                ).scalars().all())
+                missing = sorted(set(lang_ids) - found)
+                if missing:
+                    return jsonify({"error": "invalid_language_ids", "missing": missing}), 400
+
+            if user.translator is not None:
+                current = {lt.language_id for lt in (user.translator.language_translators or [])}
+                desired = set(lang_ids)
+                if current - desired:
+                    session.execute(
+                        delete(LanguageTranslator).where(
+                            LanguageTranslator.translator_id == user.translator.id,
+                            LanguageTranslator.language_id.in_(list(current - desired))
+                        )
+                    )
+                for lid in (desired - current):
+                    session.add(LanguageTranslator(
+                        translator_id=user.translator.id,
+                        language_id=lid
+                    ))
+
+            if user.speaker is not None:
+                current = {ls.language_id for ls in (user.speaker.language_speakers or [])}
+                desired = set(lang_ids)
+                if current - desired:
+                    session.execute(
+                        delete(LanguageSpeaker).where(
+                            LanguageSpeaker.speaker_id == user.speaker.id,
+                            LanguageSpeaker.language_id.in_(list(current - desired))
+                        )
+                    )
+                for lid in (desired - current):
+                    session.add(LanguageSpeaker(
+                        speaker_id=user.speaker.id,
+                        language_id=lid
+                    ))
+
+        session.flush()
+        translator = session.execute(
+            session.query(Translator)
+            .options(
+                selectinload(Translator.language_translators)
+                .selectinload(LanguageTranslator.language)
+            )
+            .where(Translator.user_id == current_user_id)
+        ).scalars().first()
+
+        speaker = session.execute(
+            session.query(Speaker)
+            .options(
+                selectinload(Speaker.language_speakers)
+                .selectinload(LanguageSpeaker.language)
+            )
+            .where(Speaker.user_id == current_user_id)
+        ).scalars().first()
+
+        resp = {
+            "user": {
+                "id": user.id,
+                "name": getattr(user, "name", None),
+                "email": getattr(user, "email", None),
+                "created_at": getattr(user, "created_at", None),
+                "updated_at": getattr(user, "updated_at", None),
+            },
+            "translator": None if not translator else {
+                "id": translator.id,
+                "user_id": translator.user_id,
+                "created_at": translator.created_at,
+                "updated_at": translator.updated_at,
+                "languages": _extract_languages(translator.language_translators),
+            },
+            "speaker": None if not speaker else {
+                "id": speaker.id,
+                "user_id": speaker.user_id,
+                "created_at": speaker.created_at,
+                "updated_at": speaker.updated_at,
+                "languages": _extract_languages(speaker.language_speakers),
+                "bio": getattr(speaker, "bio", None),
+            },
+        }
+        return jsonify(resp), 200
 
     app.register_blueprint(bp)
     return app

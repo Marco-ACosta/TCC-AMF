@@ -1,4 +1,3 @@
-// src/storage/LocalStorage.ts
 export type LocalStorageCredentials = {
   email: string;
   password: string;

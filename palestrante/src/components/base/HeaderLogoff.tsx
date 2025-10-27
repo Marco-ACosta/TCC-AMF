@@ -1,24 +1,28 @@
 "use client";
 
-import { Button } from "@mui/material";
 import { AuthContextProvider } from "@/contexts/AuthContext";
+import { Link, Typography } from "@mui/material";
+import LogoutIcon from "@mui/icons-material/Logout";
 
 export default function HeaderLogoff() {
-  const { logoff } = AuthContextProvider(); // chama o hook/função do contexto
-
+  const { logoff } = AuthContextProvider();
   return (
-    <Button
-      type="button"
+    <Link
       onClick={() => logoff()}
       style={{
+        textAlign: "center",
         textDecoration: "none",
-        border: "1px solid #e5e7eb",
-        borderRadius: 8,
-        padding: "8px 12px",
-        fontSize: 14,
-        color: "#000000",
+        display: "block",
+        borderBottom: "1px solid #00000080",
+        paddingBottom: 8,
+        color: "black",
       }}>
-      Sair
-    </Button>
+      <LogoutIcon />
+      <Typography
+        variant="h2"
+        style={{ padding: 8, fontSize: 18, textAlign: "center" }}>
+        Sair
+      </Typography>
+    </Link>
   );
 }

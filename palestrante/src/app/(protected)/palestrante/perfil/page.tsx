@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Screen from "@/components/base/Screen";
 import Box from "@/components/base/Box";
-import { Divider } from "@mui/material";
+import { Alert, Button, Divider, Snackbar, Stack } from "@mui/material";
 import UserService from "@/services/api/userService";
 
 import ProfileHeader from "@/components/profile/ProfileHeader";
@@ -17,38 +18,20 @@ import {
 
 import { ProfileVM } from "@/types/profile";
 
-type ApiLanguage = {
-  id: number | string;
-  code?: string;
-  name?: string;
-  created_at?: number;
-  updated_at?: number;
-};
-
-type ApiRole = {
-  id: number | string;
-  user_id?: number | string;
-  created_at?: number;
-  updated_at?: number;
-  languages?: ApiLanguage[];
-} | null;
-
-type ApiResponse = {
-  user: {
-    id: number | string;
-    name?: string;
-    email?: string;
-    created_at?: number;
-    updated_at?: number;
-  };
-  translator: ApiRole;
-  speaker: ApiRole;
-};
-
 export default function ProfilePage() {
+  const router = useRouter();
+  const search = useSearchParams();
+
   const [profile, setProfile] = useState<ProfileVM | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success_msg, set_success_msg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (search?.get("updated") === "1") {
+      set_success_msg("Perfil atualizado com sucesso.");
+    }
+  }, [search]);
 
   useEffect(() => {
     let alive = true;
@@ -58,15 +41,16 @@ export default function ProfilePage() {
         setError(null);
 
         const res = await UserService.GetProfile();
-        const raw: ApiResponse = (res?.Data as ApiResponse) ?? res;
-
+        const raw: ProfileVM = (res?.Data as ProfileVM) ?? res;
         const vm: ProfileVM | null = raw?.user
           ? {
-              id: raw.user.id,
-              name: raw.user.name,
-              email: raw.user.email,
-              created_at: raw.user.created_at,
-              updated_at: raw.user.updated_at,
+              user: {
+                id: raw.user.id,
+                name: raw.user.name,
+                email: raw.user.email,
+                created_at: raw.user.created_at,
+                updated_at: raw.user.updated_at,
+              },
               translator: raw?.translator
                 ? {
                     id: raw.translator.id,
@@ -81,6 +65,7 @@ export default function ProfilePage() {
               speaker: raw?.speaker
                 ? {
                     id: raw.speaker.id,
+                    bio: raw.speaker.bio,
                     languages:
                       raw.speaker.languages?.map((l) => ({
                         id: l.id,
@@ -148,15 +133,38 @@ export default function ProfilePage() {
 
               <div>
                 <Divider style={{ margin: "8px 0" }} />
-                <RoleLanguagesPanel
-                  title="Palestrante"
-                  role={profile?.speaker}
-                />
+                <RoleLanguagesPanel title="Idiomas" role={profile?.speaker} />
+              </div>
+
+              <div>
+                <Divider style={{ margin: "16px 0" }} />
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  spacing={2}
+                  sx={{ mb: 1 }}>
+                  <Button
+                    variant="contained"
+                    onClick={() => router.push("perfil/edit")}>
+                    Editar
+                  </Button>
+                </Stack>
               </div>
             </>
           )}
         </div>
       </Box.Center>
+
+      <Snackbar
+        open={!!success_msg}
+        autoHideDuration={3500}
+        onClose={() => set_success_msg(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity="success" onClose={() => set_success_msg(null)}>
+          {success_msg}
+        </Alert>
+      </Snackbar>
     </Screen>
   );
 }

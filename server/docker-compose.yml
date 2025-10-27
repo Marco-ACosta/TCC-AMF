@@ -48,23 +48,6 @@ services:
     entrypoint: ["alembic"]
     command: ["upgrade", "head"]
 
-  room:
-    build:
-      context: .
-      dockerfile: room/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg://app:app@pgbouncer:6432/postgresql
-      DB_SCHEMA: public
-      DB_POOL_SIZE: 10
-      DB_MAX_OVERFLOW: 20
-      DB_POOL_RECYCLE: 1800
-      SQL_ECHO: 0
-      PORT: 5004
-    depends_on:
-      pgbouncer:
-        condition: service_started
-    expose: ["5004"]
-
   signal:
     build:
       context: .
@@ -98,6 +81,40 @@ services:
       pgbouncer:
         condition: service_started
     expose: ["5003"]
+
+  room:
+    build:
+      context: .
+      dockerfile: room/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@pgbouncer:6432/postgresql
+      DB_SCHEMA: public
+      DB_POOL_SIZE: 10
+      DB_MAX_OVERFLOW: 20
+      DB_POOL_RECYCLE: 1800
+      SQL_ECHO: 0
+      PORT: 5004
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    expose: ["5004"]
+
+  language:
+    build:
+      context: .
+      dockerfile: language/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@pgbouncer:6432/postgresql
+      DB_SCHEMA: public
+      DB_POOL_SIZE: 10
+      DB_MAX_OVERFLOW: 20
+      DB_POOL_RECYCLE: 1800
+      SQL_ECHO: 0
+      PORT: 5005
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    expose: ["5005"]
 
 volumes:
   pgdata:

@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Auth from "@/components/base/Auth";
-import HeaderLogoff from "@/components/base/HeaderLogoff";
 import { LocalStorage } from "@/storage/LocalStorage";
-
+import { Typography } from "@mui/material";
+import PersonIcon from "@mui/icons-material/Person";
+import GroupIcon from "@mui/icons-material/Group";
+import MicIcon from "@mui/icons-material/Mic";
+import HeaderLogoff from "@/components/base/HeaderLogoff";
 const MENU_W = "15vw";
 
 export default function ClientShell({
@@ -43,7 +46,11 @@ export default function ClientShell({
           flexDirection: "column",
           gap: 24,
         }}>
-        <h2 style={{ margin: "8px 0 16px 0", fontSize: 18 }}>Menu</h2>
+        <Typography
+          variant="h5"
+          style={{ padding: 8, paddingTop: 48, textAlign: "center" }}>
+          Menu
+        </Typography>
         <nav
           style={{
             display: "flex",
@@ -60,7 +67,12 @@ export default function ClientShell({
               borderBottom: "1px solid #00000080",
               paddingBottom: 8,
             }}>
-            Perfil
+            <PersonIcon />
+            <Typography
+              variant="h2"
+              style={{ padding: 8, fontSize: 18, textAlign: "center" }}>
+              Perfil
+            </Typography>
           </Link>
           <Link
             href={`/${role}`}
@@ -71,8 +83,32 @@ export default function ClientShell({
               borderBottom: "1px solid #00000080",
               paddingBottom: 8,
             }}>
-            Salas
+            <MicIcon />
+            <Typography
+              variant="h2"
+              style={{ padding: 8, fontSize: 18, textAlign: "center" }}>
+              Salas
+            </Typography>
           </Link>
+          {role === "admin" && (
+            <Link
+              href={`/${role}/usuarios`}
+              style={{
+                textAlign: "center",
+                textDecoration: "none",
+                display: "block",
+                borderBottom: "1px solid #00000080",
+                paddingBottom: 8,
+              }}>
+              <GroupIcon />
+              <Typography
+                variant="h2"
+                style={{ padding: 8, fontSize: 18, textAlign: "center" }}>
+                Usuários
+              </Typography>
+            </Link>
+          )}
+          <HeaderLogoff />
         </nav>
       </aside>
 
@@ -86,23 +122,6 @@ export default function ClientShell({
           flexDirection: "column",
           background: "white",
         }}>
-        <header
-          style={{
-            height: 56,
-            borderBottom: "1px solid #e5e7eb",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 24px",
-            position: "sticky",
-            top: 0,
-            zIndex: 5,
-            background: "white",
-          }}>
-          <strong style={{ fontSize: 16 }}>Tradutor AMF</strong>
-          <HeaderLogoff />
-        </header>
-
         <section
           style={{
             flex: 1,

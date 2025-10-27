@@ -1,12 +1,18 @@
 "use client";
 
+import { Typography } from "@mui/material";
+
 export default function RoomsHeader({ count }: { count: number }) {
   return (
     <div style={{ textAlign: "center" }}>
-      <h1 style={{ margin: 0 }}>Salas</h1>
-      <div style={{ opacity: 0.75, fontSize: 12, marginTop: 4 }}>
-        {count > 0 ? `${count} sala(s) encontradas` : "—"}
-      </div>
+      <Typography style={{ textAlign: "left" }} typography={"h5"}>
+        Salas
+      </Typography>
+      <Typography typography={"caption"} style={{ opacity: 0.6 }}>
+        {count > 0
+          ? `${count} ${count === 1 ? `sala encontrada` : `salas encontradas`}`
+          : "—"}
+      </Typography>
     </div>
   );
 }

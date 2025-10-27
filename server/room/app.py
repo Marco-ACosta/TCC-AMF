@@ -697,6 +697,7 @@ def create_app():
                 if src and src.id not in entry["_lang_ids"]:
                     entry["_lang_ids"].add(src.id)
                     entry["languages"].append({
+                        "id": src.id,
                         "name": src.name,
                         "code": src.code,
                     })
@@ -715,8 +716,8 @@ def create_app():
                     if key not in entry["_pair_keys"]:
                         entry["_pair_keys"].add(key)
                         entry["pairs"].append({
-                            "source": {"name": src.name, "code": src.code},
-                            "target": {"name": tgt.name, "code": tgt.code},
+                            "source": {"name": src.name, "code": src.code, "id": src.id},
+                            "target": {"name": tgt.name, "code": tgt.code, "id": tgt.id},
                         })
 
         for d in speakers_by_user.values():

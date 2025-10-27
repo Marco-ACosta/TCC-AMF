@@ -467,7 +467,7 @@ export default function RelayPage({ params }: { params: { room: string } }) {
         const chosenTgt = computeAutoTgt(d, chosenSrc);
         setAutoTgt(chosenTgt);
 
-        const socket = io(env.SignalingURL(), {
+        const socket = io(env.BackendUrl(), {
           transports: ["websocket", "polling"],
           path: "/signal",
           withCredentials: false,

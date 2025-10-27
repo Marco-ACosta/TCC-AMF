@@ -263,7 +263,7 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         const chosen = computeAutoSrc(d);
         setAutoSrc(chosen);
 
-        const socket = io(env.SignalingURL(), {
+        const socket = io(env.BackendUrl(), {
           transports: ["websocket", "polling"],
           path: "/signal",
           withCredentials: false,

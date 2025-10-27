@@ -1,4 +1,4 @@
-export type Language = { id: number | string; code?: string; name?: string };
+import { Language } from "./language";
 
 export type Speaker = {
   user_id: number | string;
@@ -75,4 +75,25 @@ export type TxStats = {
   totalSamplesSent?: number;
   audioLevel?: number;
   timestamp?: number;
+};
+
+export type SimpleUser = {
+  id: number | string;
+  name: string;
+  languages: Language[];
+};
+
+export type TranslatorRow = {
+  user_id?: number | string;
+  from_language_code?: string;
+  to_language_code?: string;
+  from_language_id?: number | string;
+  to_language_id?: number | string;
+  _error?: string | null;
+};
+
+export type SpeakerRow = {
+  user_id?: number | string;
+  language_id?: number | string;
+  _error?: string | null;
 };

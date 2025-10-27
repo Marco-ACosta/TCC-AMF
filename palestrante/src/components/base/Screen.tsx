@@ -42,7 +42,6 @@ export default function Screen({
   showSection = true,
   loading,
 }: ScreenProps) {
-  // Se o header existe e deve aparecer, é montado
   const header =
     headerComponent && showHeader ? (
       <header
@@ -58,7 +57,6 @@ export default function Screen({
       <></>
     );
 
-  // Se o footer existe e deve aparecer, é montado
   const footer =
     footerComponent && showFooter ? (
       <footer
@@ -74,7 +72,6 @@ export default function Screen({
       <></>
     );
 
-  // Se o section existe e deve aparecer, é montado
   const _section =
     sectionComponent && showSection ? (
       <section

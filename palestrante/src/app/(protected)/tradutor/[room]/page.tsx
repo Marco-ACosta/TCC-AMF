@@ -34,6 +34,7 @@ export default function RoomDetailsPage({
 
         const vm: RoomDetails | null = raw
           ? {
+              id: String(raw.id ?? room),
               code: String(raw.code ?? room),
               name: String(raw.name ?? ""),
               description: String(raw.description ?? ""),

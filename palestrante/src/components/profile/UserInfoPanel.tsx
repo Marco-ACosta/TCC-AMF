@@ -1,6 +1,6 @@
 "use client";
 
-import { Divider, Paper, Typography } from "@mui/material";
+import { Divider, Paper, TextareaAutosize, Typography } from "@mui/material";
 import { ProfileVM } from "@/types/profile";
 import { formatEpochBR } from "@/utils/datetime";
 import InfoRow from "@/components/room/InfoRow";
@@ -18,11 +18,14 @@ export default function UserInfoPanel({ profile }: Props) {
         gap: 12,
       }}>
       <Typography variant="h6" sx={{ m: 0 }}>
-        Informações do usuário
+        Informações pessoais
       </Typography>
       <Divider />
-      <InfoRow label="Nome" value={profile?.name ?? ""} />
-      <InfoRow label="E-mail" value={profile?.email ?? ""} />
+      <InfoRow label="Nome" value={profile?.user.name ?? ""} />
+      <InfoRow label="E-mail" value={profile?.user.email ?? ""} />
+      {profile?.speaker && (
+        <InfoRow label="Descrição" value={profile?.speaker?.bio ?? ""} />
+      )}
     </Paper>
   );
 }
