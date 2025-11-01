@@ -9,14 +9,11 @@ import {
   Typography,
   Stack,
   Button,
-  IconButton,
   Menu,
   MenuItem,
   Divider,
-  Tooltip,
   Link,
 } from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -49,9 +46,6 @@ export default function RoomCard({
     return Number.isFinite(n) ? n : null;
   }, [room.id]);
 
-  function openMenu(e: React.MouseEvent<HTMLElement>) {
-    setMenuEl(e.currentTarget);
-  }
   function closeMenu() {
     setMenuEl(null);
   }
@@ -131,12 +125,6 @@ export default function RoomCard({
                   </Typography>
                 )}
               </Stack>
-
-              <Tooltip title="Mais ações">
-                <IconButton aria-label="mais ações" onClick={openMenu}>
-                  <MoreVertIcon />
-                </IconButton>
-              </Tooltip>
               <Menu
                 anchorEl={menuEl}
                 open={menuOpen}

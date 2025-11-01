@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState } from "react";
 import Screen from "@/components/base/Screen";
+import { LoadingBlock } from "@/components/base/LoadState";
 
 type InitialContextProps = {
   children: JSX.Element | JSX.Element[];
@@ -11,7 +12,6 @@ type InitialContext = {};
 
 const InitialContext = createContext<InitialContext | null>(null);
 
-/** Context especializado no tratamento / carregamento de dados iniciais da aplicação */
 export default function InitialContextComponent({
   children,
 }: InitialContextProps) {
@@ -20,7 +20,7 @@ export default function InitialContextComponent({
   if (loading) {
     return (
       <Screen>
-        <h3>Carregando...</h3>
+        <LoadingBlock full />
       </Screen>
     );
   }

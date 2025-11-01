@@ -169,7 +169,7 @@ export default function EditProfilePage() {
           }}>
           <Typography variant="h5">Editar perfil</Typography>
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!pageError && <ErrorBlock error={pageError} />}
           {!loading && !pageError && !hasProfile && (
             <EmptyBlock message="Nenhum perfil encontrado." />

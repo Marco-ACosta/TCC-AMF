@@ -78,7 +78,7 @@ export default function RoomsPage() {
           }}>
           <RoomsHeader count={rooms.length} />
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!error && <ErrorBlock error={error} />}
 
           {!loading && !error && rooms.length === 0 && (

@@ -14,6 +14,7 @@ import {
   RoomInfoPayload,
 } from "@/types/room";
 import { Button, Paper, Typography, Chip, Stack } from "@mui/material";
+import MicLevelMeter from "@/components/room/MicLevelMeter";
 
 const iceServers: RTCIceServer[] = [];
 
@@ -635,7 +636,7 @@ export default function RelayPage({ params }: { params: { room: string } }) {
     autoSrc,
   ]);
 
-  const txMaxLevel = useMemo(
+  const micLevel = useMemo(
     () =>
       Object.values(dsLevels).length ? Math.max(...Object.values(dsLevels)) : 0,
     [dsLevels]
@@ -646,19 +647,16 @@ export default function RelayPage({ params }: { params: { room: string } }) {
   return (
     <Screen>
       <Box.Column style={{ gap: 16 }}>
-        <Typography variant="h2">{details?.name ?? roomCode}</Typography>
+        <Typography variant="h2">Sala: {details?.name ?? roomCode}</Typography>
 
         <Paper
           style={{
             padding: 12,
             display: "flex",
             gap: 12,
-            alignItems: "center",
-            flexWrap: "wrap",
+            flexDirection: "column",
           }}>
-          <Typography variant="body2">
-            Volume de entrada: <strong>{rxLevel.toFixed(3)}</strong>
-          </Typography>
+          <MicLevelMeter micLevel={rxLevel} label={"Entrada"} showDb={false} />
           <Button size="small" variant="outlined" onClick={toggleMonitor}>
             {monitorEnabled ? "Mutar palestrante" : "Ouvir palestrante"}
           </Button>
@@ -666,9 +664,7 @@ export default function RelayPage({ params }: { params: { room: string } }) {
         </Paper>
 
         <Paper style={{ padding: 12 }}>
-          <Typography variant="body2">
-            Volume de saida: <strong>{txMaxLevel.toFixed(3)}</strong>
-          </Typography>
+          <MicLevelMeter micLevel={micLevel} label={"Saída"} showDb={false} />
         </Paper>
       </Box.Column>
     </Screen>

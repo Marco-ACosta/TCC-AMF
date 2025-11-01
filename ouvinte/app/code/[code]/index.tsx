@@ -307,7 +307,7 @@ export default function CodeScreen() {
             </View>
 
             <Text style={styles.sheetSubtitle}>
-              Selecione uma dublagem disponível para o áudio da sessão:
+              Selecione uma linguagem disponível para o áudio da sessão:
             </Text>
 
             <ScrollView

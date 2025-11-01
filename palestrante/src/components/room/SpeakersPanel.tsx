@@ -4,6 +4,7 @@ import { Divider, Paper, Typography } from "@mui/material";
 import { Speaker } from "@/types/room";
 import InfoRow from "./InfoRow";
 import LanguagesChips from "./LanguagesChips";
+import { LoadingBlock } from "../base/LoadState";
 
 type Props = {
   loading?: boolean;
@@ -24,7 +25,7 @@ export default function SpeakersPanel({ loading, speakers }: Props) {
         Palestrantes
       </Typography>
       <Divider />
-      {loading && <span style={{ opacity: 0.7 }}>Carregando…</span>}
+      {loading && <LoadingBlock full />}
       {!loading && (speakers ?? []).length === 0 && (
         <span style={{ opacity: 0.7 }}>Nenhum speaker cadastrado.</span>
       )}

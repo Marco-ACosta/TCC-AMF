@@ -10,6 +10,7 @@ import {
 } from "@mui/material";
 import InfoRow from "./InfoRow";
 import { RoomDetails } from "@/types/room";
+import { LoadingBlock } from "../base/LoadState";
 
 type Props = {
   loading?: boolean;
@@ -38,14 +39,7 @@ export default function RoomInfoPanel({
       </Typography>
       <Divider />
 
-      {loading && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <CircularProgress size={18} />
-          <span style={{ fontSize: 12, opacity: 0.8 }}>
-            Carregando detalhes…
-          </span>
-        </div>
-      )}
+      {loading && <LoadingBlock full />}
 
       {!!error && (
         <Typography color="error" variant="body2">

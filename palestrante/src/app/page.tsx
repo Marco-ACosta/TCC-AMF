@@ -3,7 +3,14 @@
 import Box from "@/components/base/Box";
 import Screen from "@/components/base/Screen";
 import { AuthContextProvider } from "@/contexts/AuthContext";
-import { Alert, Button, Card, TextField } from "@mui/material";
+import {
+  Alert,
+  Backdrop,
+  Button,
+  Card,
+  CircularProgress,
+  TextField,
+} from "@mui/material";
 import { useState } from "react";
 
 export default function HomeScreen() {
@@ -11,16 +18,20 @@ export default function HomeScreen() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
+    setLoading(true);
     try {
       await login({ email, password });
     } catch (err: any) {
       setErrorMsg(
         err?.message || "Falha ao entrar. Verifique e tente novamente."
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -28,6 +39,12 @@ export default function HomeScreen() {
 
   return (
     <Screen>
+      <Backdrop
+        open={loading}
+        sx={{ color: "#fff", zIndex: (theme) => theme.zIndex.modal + 1 }}>
+        <CircularProgress />
+      </Backdrop>
+
       <Box.Center style={{ width: "100vw", height: "100vh" }}>
         <Card
           style={{
@@ -40,10 +57,7 @@ export default function HomeScreen() {
           }}>
           <form
             onSubmit={handleSubmit}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-            }}>
+            style={{ display: "flex", flexDirection: "column" }}>
             <h1 style={{ width: "100%", textAlign: "center" }}>LOGIN</h1>
 
             <TextField
@@ -54,6 +68,7 @@ export default function HomeScreen() {
               onChange={(e) => setEmail(e.target.value)}
               error={hasError}
               autoFocus
+              disabled={loading}
             />
 
             <TextField
@@ -64,14 +79,23 @@ export default function HomeScreen() {
               onChange={(e) => setPassword(e.target.value)}
               type="password"
               error={hasError}
+              disabled={loading}
             />
 
             <Button
               type="submit"
               variant="contained"
               color="primary"
+              disabled={loading}
               style={{ justifySelf: "center", alignSelf: "center" }}>
-              Login
+              {loading ? (
+                <>
+                  <CircularProgress size={18} style={{ marginRight: 8 }} />
+                  Entrando…
+                </>
+              ) : (
+                "Login"
+              )}
             </Button>
           </form>
 

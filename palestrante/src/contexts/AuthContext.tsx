@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { LocalStorage } from "@/storage/LocalStorage";
 import AuthService from "@/services/api/authService";
 import UserService from "@/services/api/userService";
+import { LoadingBlock } from "@/components/base/LoadState";
 type AuthContextProps = { children: JSX.Element | JSX.Element[] };
 
 type AuthContextType = {
@@ -72,7 +73,7 @@ export default function AuthContextComponent({ children }: AuthContextProps) {
   if (loading) {
     return (
       <Screen>
-        <h3>Carregando...</h3>
+        <LoadingBlock full />
       </Screen>
     );
   }

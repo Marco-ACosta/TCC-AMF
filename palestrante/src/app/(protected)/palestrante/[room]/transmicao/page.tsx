@@ -14,6 +14,7 @@ import {
   RoomInfoPayload,
 } from "@/types/room";
 import { Paper, Typography } from "@mui/material";
+import MicLevelMeter from "@/components/room/MicLevelMeter";
 
 const iceServers: RTCIceServer[] = [];
 
@@ -361,15 +362,9 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         <Typography variant="h2">Sala: {details?.name ?? roomCode}</Typography>
         <Paper
           style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "center",
-            flexWrap: "wrap",
             padding: 12,
           }}>
-          <Typography variant="body2">
-            Volume de saida: <strong>{micLevel.toFixed(3)}</strong>
-          </Typography>
+          <MicLevelMeter micLevel={micLevel} label={"Saída"} showDb={false} />
         </Paper>
       </Box.Column>
     </Screen>

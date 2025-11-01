@@ -1,7 +1,7 @@
 import { Language } from "./language";
 
 export type Speaker = {
-  user_id: number | string;
+  id: number | string;
   name: string;
   bio?: string | null;
   languages: Language[];
@@ -10,7 +10,7 @@ export type Speaker = {
 export type LangPair = { source: Language; target: Language };
 
 export type Translator = {
-  user_id: number | string;
+  id: number | string;
   name: string;
   pairs: LangPair[];
 };

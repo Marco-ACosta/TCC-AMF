@@ -176,7 +176,7 @@ export default function UsersPage() {
             onChangeFilter={(f) => setFilter(f)}
           />
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!error && <ErrorBlock error={error} />}
 
           {!loading && !error && users.length === 0 && (

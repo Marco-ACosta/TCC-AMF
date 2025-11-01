@@ -167,7 +167,7 @@ export default function RoomsPage() {
             </Stack>
           </div>
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!error && <ErrorBlock error={error} />}
 
           {!loading && !error && rooms.length === 0 && (

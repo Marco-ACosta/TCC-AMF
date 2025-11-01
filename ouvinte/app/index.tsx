@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +21,12 @@ export default function EnterCodeScreen() {
   const inputRef = useRef<TextInput>(null);
 
   const canContinue = code.trim().length > 0;
+
+  const keyboardBehavior = Platform.OS === "ios" ? "padding" : "height";
+  const keyboardOffset = Platform.select({
+    ios: 0,
+    android: StatusBar.currentHeight ?? 0,
+  });
 
   function handleContinue() {
     const value = code.trim();
@@ -36,13 +43,14 @@ export default function EnterCodeScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#F3F4F6" }}
-      behavior={Platform.select({ ios: "padding", android: undefined })}
-      keyboardVerticalOffset={0}>
+      behavior={keyboardBehavior}
+      keyboardVerticalOffset={keyboardOffset}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView
         contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "on-drag" : "none"}>
         <Image
           source={require("@/assets/images/logo-amf.png")}
           style={styles.logo}
@@ -103,6 +111,7 @@ export default function EnterCodeScreen() {
           accessibilityLabel="Entrar na sessão">
           <Text style={styles.enterText}>Entrar</Text>
         </TouchableOpacity>
+        <View style={{ height: 16 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

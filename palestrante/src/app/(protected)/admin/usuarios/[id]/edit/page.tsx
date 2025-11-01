@@ -111,7 +111,7 @@ export default function UserEditPage() {
           }}>
           <UserFormHeader title="Editar usuário" />
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!error && !loading && <ErrorBlock error={error} />}
 
           {!loading && !error && user && (

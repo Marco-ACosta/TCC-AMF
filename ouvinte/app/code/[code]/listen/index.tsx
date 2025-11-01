@@ -68,7 +68,6 @@ const BLUE = "#0B66C3";
 const GREEN = "#059669";
 const GRAY = "#9CA3AF";
 
-type SheetMode = "audio" | "caption";
 type OfferPayload = {
   from: string | number;
   sdp: string;
@@ -154,7 +153,6 @@ export default function ListenScreen() {
   const statsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [sheetMode, setSheetMode] = useState<SheetMode>("audio");
   const [tempLang, setTempLang] = useState<LanguageOption | null>(null);
   const sheetAnim = useRef(new Animated.Value(0)).current;
 
@@ -248,9 +246,8 @@ export default function ListenScreen() {
     }
   }, [languageOptions, lang, captionLang]);
 
-  function openSheet(mode: SheetMode) {
-    setSheetMode(mode);
-    setTempLang(mode === "audio" ? audioLang : captionLang);
+  function openSheet() {
+    setTempLang(audioLang);
     setSheetVisible(true);
     Animated.timing(sheetAnim, {
       toValue: 1,
@@ -268,12 +265,9 @@ export default function ListenScreen() {
     }).start(({ finished }) => {
       if (finished) {
         if (apply && tempLang) {
-          if (sheetMode === "audio") {
-            const old = audioLang?.code;
-            setAudioLang(tempLang);
-            if (tempLang.code !== old)
-              retuneRooms(tempLang.code).catch(() => {});
-          } else setCaptionLang(tempLang);
+          const old = audioLang?.code;
+          setAudioLang(tempLang);
+          if (tempLang.code !== old) retuneRooms(tempLang.code).catch(() => {});
         }
         setSheetVisible(false);
       }
@@ -704,7 +698,7 @@ export default function ListenScreen() {
         <View style={styles.rowButtons}>
           <TouchableOpacity
             style={[styles.btn, styles.btnOutline]}
-            onPress={() => openSheet("audio")}>
+            onPress={() => openSheet()}>
             <Text style={styles.btnOutlineText}>Trocar idioma</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -726,28 +720,21 @@ export default function ListenScreen() {
               { transform: [{ translateY }], paddingBottom: safePadBottom },
             ]}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetIcon}>
-                {sheetMode === "audio" ? "🔊" : "Tt"}
-              </Text>
-              <Text style={styles.sheetTitle}>
-                {sheetMode === "audio" ? "Áudio" : "Legendas"}
-              </Text>
+              <Text style={styles.sheetTitle}>{"Áudio"}</Text>
               <Pressable hitSlop={10} onPress={() => closeSheet(false)}>
                 <Text style={styles.sheetClose}>✕</Text>
               </Pressable>
             </View>
 
             <Text style={styles.sheetSubtitle}>
-              {sheetMode === "audio"
-                ? "Selecione a dublagem/idioma desejado:"
-                : "Selecione o idioma das legendas:"}
+              {"Selecione o idioma desejado:"}
             </Text>
 
             <ScrollView
               style={{ maxHeight: 300 }}
               keyboardShouldPersistTaps="handled">
               {languageOptions.map((opt) => {
-                const curr = sheetMode === "audio" ? audioLang : captionLang;
+                const curr = audioLang;
                 const checked = (tempLang ?? curr)?.code === opt.code;
                 return (
                   <Pressable

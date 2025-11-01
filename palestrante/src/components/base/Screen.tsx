@@ -1,25 +1,16 @@
 import { CircularProgress } from "@mui/material";
 import Box from "./Box";
+import { LoadingBlock } from "./LoadState";
 
-/** Propriedades do componente Screen */
 type ScreenProps = {
-  /** Componentes filhos. */
   children: JSX.Element | JSX.Element[];
-  /** Componente personalizado para header. */
   headerComponent?: JSX.Element;
-  /** Aparição do header. */
   showHeader?: boolean;
-  /** Componente personalizado para footer. */
   footerComponent?: JSX.Element;
-  /** Aparição do footer. */
   showFooter?: boolean;
-  /** Componente personalizado para section. */
   sectionComponent?: JSX.Element;
-  /** Largura da section. */
   sectionWidth?: number;
-  /** Aparição do section. */
   showSection?: boolean;
-  /** Customizações para tela padrão de carregamento. */
   loading?: {
     isLoading: boolean;
     loadingText?: string;
@@ -28,9 +19,6 @@ type ScreenProps = {
   };
 };
 
-/**
- * Componente base para telas.
- * */
 export default function Screen({
   children,
   headerComponent,
@@ -95,33 +83,7 @@ export default function Screen({
         minHeight: "100vh",
       }}>
       {loading && loading.isLoading ? (
-        <>
-          {loading.showHeader && header}
-          <main
-            style={{
-              flex: 1,
-              display: "flex",
-              width: "100%",
-            }}>
-            <Box.Column
-              style={{
-                flex: 1,
-                flexGrow: 1,
-                flexShrink: 1,
-                display: "flex",
-                justifyContent: "center",
-                alignContent: "center",
-                alignItems: "center",
-                gap: 15,
-              }}>
-              <h1>
-                {loading.loadingText ? loading.loadingText : "Carregando"}
-              </h1>
-              <CircularProgress size={30} />
-            </Box.Column>
-          </main>
-          {loading.showFooter && footer}
-        </>
+        <LoadingBlock full />
       ) : (
         <>
           {header}

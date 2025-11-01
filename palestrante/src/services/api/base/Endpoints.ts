@@ -9,17 +9,10 @@ import env from "../../../config/env";
 import Response from "./Response";
 
 export default abstract class Endpoints {
-  /** Header padrão das requisições */
   private static defaultHeader: RequestHeader = {
     "Content-Type": "application/json",
   };
 
-  /**
-   * Monta todos os headers de uma requisição
-   * @param requestHeaders Lista de headers de uma requisição
-   * @param authorization Autorização da requisição
-   * @returns Retorna uma sequência de headers
-   */
   private static mountHeaders = (
     requestHeaders: RequestHeader[],
     authorization?: string
@@ -34,7 +27,6 @@ export default abstract class Endpoints {
     }, {} as any);
   };
 
-  /** Requisição GET */
   protected static async Get<T>({
     url,
     headers = [this.defaultHeader],
@@ -64,7 +56,6 @@ export default abstract class Endpoints {
     }
   }
 
-  /** Requisição POST */
   protected static async Post<T>({
     url,
     headers = [this.defaultHeader],
@@ -100,7 +91,6 @@ export default abstract class Endpoints {
     }
   }
 
-  /** Requisição PUT */
   protected static async Put<T>({
     url,
     headers = [this.defaultHeader],
@@ -118,7 +108,6 @@ export default abstract class Endpoints {
     });
   }
 
-  /** Requisição DELETE */
   protected static async Delete<T>({
     url,
     headers = [this.defaultHeader],
@@ -136,12 +125,10 @@ export default abstract class Endpoints {
     });
   }
 
-  /** Captura o dado de autenticação (token) */
   protected static async GetAuthorization(): Promise<string> {
     return "";
   }
 
-  /** Trata o Response final */
   private static TreatResponse<T>(response: Response<T>): Response<T> {
     if (response.ErrorMessage === "Network request failed") {
       response.Success = false;
@@ -151,7 +138,6 @@ export default abstract class Endpoints {
     return response;
   }
 
-  /** Realiza o tratamento da response original da função fetch */
   private static async TreatRawResponse(
     rawResponse: globalThis.Response
   ): Promise<{ json: any; hasError: boolean }> {
@@ -178,7 +164,6 @@ export default abstract class Endpoints {
     }
   }
 
-  /** Gera um Response<T> baseado no tratamento do JSON da response original, status da requisição e se há erro no tratamento original */
   private static ParseRawResponse<T>(
     json: any,
     responseStatus: number,

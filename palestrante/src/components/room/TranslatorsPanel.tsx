@@ -4,6 +4,7 @@ import { Divider, Paper, Typography } from "@mui/material";
 import { Translator } from "@/types/room";
 import InfoRow from "./InfoRow";
 import LangPairs from "./LangPairs";
+import { LoadingBlock } from "../base/LoadState";
 
 type Props = {
   loading?: boolean;
@@ -24,7 +25,7 @@ export default function TranslatorsPanel({ loading, translators }: Props) {
         Tradutores
       </Typography>
       <Divider />
-      {loading && <span style={{ opacity: 0.7 }}>Carregando…</span>}
+      {loading && <LoadingBlock full />}
       {!loading && (translators ?? []).length === 0 && (
         <span style={{ opacity: 0.7 }}>Nenhum translator cadastrado.</span>
       )}

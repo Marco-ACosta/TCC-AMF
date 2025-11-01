@@ -121,7 +121,7 @@ export default function ProfilePage() {
           }}>
           <ProfileHeader />
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!error && <ErrorBlock error={error} />}
           {!loading && !error && !hasProfile && (
             <EmptyBlock message="Nenhum perfil encontrado." />

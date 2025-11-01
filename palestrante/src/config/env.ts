@@ -3,7 +3,6 @@ type envProps = {
   Environment: () => "testing" | "production";
 };
 
-/** Buscador de variáveis de ambiente */
 const env: envProps = {
   BackendUrl: () => {
     const _ = String(process.env["NEXT_PUBLIC_BACKEND_URL"]);

@@ -15,12 +15,13 @@ import {
   EmptyBlock,
 } from "@/components/base/LoadState";
 
-import { Language, ProfileVM } from "@/types/profile";
+import { ProfileVM } from "@/types/profile";
 
 import SaveCancelBar from "@/components/profile/SaveCancelBar";
 import UserBasicsForm from "@/components/profile/UserBasicsForm";
 import PasswordChangeForm from "@/components/profile/PasswordChangeForm";
 import LanguagesMultiSelect from "@/components/profile/LanguagesMultiSelect";
+import { Language } from "@/types/language";
 
 function trim_or_none(v?: string | null): string | null {
   if (v === undefined || v === null) return null;
@@ -218,7 +219,7 @@ export default function EditProfilePage() {
           }}>
           <Typography variant="h5">Editar perfil</Typography>
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!pageError && <ErrorBlock error={pageError} />}
           {!loading && !pageError && !hasProfile && (
             <EmptyBlock message="Nenhum perfil encontrado." />

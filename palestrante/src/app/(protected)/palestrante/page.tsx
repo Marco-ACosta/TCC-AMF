@@ -17,7 +17,7 @@ import { RoomItem } from "@/types/room";
 
 export default function RoomsPage() {
   const [rooms, setRooms] = useState<RoomItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function RoomsPage() {
           }}>
           <RoomsHeader count={rooms.length} />
 
-          {loading && <LoadingBlock />}
+          {loading && <LoadingBlock full />}
           {!!error && <ErrorBlock error={error} />}
 
           {!loading && !error && rooms.length === 0 && (

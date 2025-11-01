@@ -2,7 +2,9 @@
 
 import { CircularProgress } from "@mui/material";
 
-export function LoadingBlock() {
+type LoadingProps = { full?: boolean };
+
+export function LoadingBlock({ full = false }: LoadingProps) {
   return (
     <div
       style={{
@@ -11,6 +13,8 @@ export function LoadingBlock() {
         alignItems: "center",
         justifyContent: "center",
         padding: 24,
+        width: full ? "100%" : undefined,
+        height: full ? "100vh" : undefined,
       }}>
       <CircularProgress size={22} />
       <span>Carregando…</span>

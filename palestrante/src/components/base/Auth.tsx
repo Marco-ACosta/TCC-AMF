@@ -21,7 +21,7 @@ export default function AuthRoute({ children }: AuthRouteProps) {
   if (!isLogged) {
     return (
       <Screen>
-        <h1>Nao logado</h1>
+        <h1></h1>
       </Screen>
     );
   }
