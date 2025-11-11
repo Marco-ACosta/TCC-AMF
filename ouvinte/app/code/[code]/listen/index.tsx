@@ -60,8 +60,17 @@ type RoomDetails = {
 };
 
 type LanguageOption = { code: string; name: string; label: string };
-const iceServers: { urls: string; username?: string; credential?: string }[] = [
+const iceServers: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
+  { urls: [`stun:${env.TurnUrl()}`] },
+  {
+    urls: [
+      `turn:${env.TurnUrl()}?transport=tcp`,
+      `turn:${env.TurnUrl()}?transport=udp`,
+    ],
+    username: env.TurnUser(),
+    credential: env.TurnPassword(),
+  },
 ];
 
 const BLUE = "#0B66C3";

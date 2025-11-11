@@ -1,11 +1,11 @@
 type envProps = {
-  /** URL base do backend */
   ApiUrl: () => string;
-  /** Ambiente do frontend */
+  TurnUrl: () => string;
+  TurnUser: () => string | undefined;
+  TurnPassword: () => string | undefined;
   Environment: () => "testing" | "production";
 };
 
-/** Buscador de variáveis de ambiente */
 const env: envProps = {
   ApiUrl: () => {
     const _ = String(process.env["EXPO_PUBLIC_API_URL"]);
@@ -13,6 +13,22 @@ const env: envProps = {
       console.error("API_URL não encontrado no ENV.");
       throw new Error("API_URL não encontrado no ENV.");
     }
+    return _;
+  },
+  TurnUrl: () => {
+    const _ = String(process.env["EXPO_PUBLIC_TUNR_URL"]);
+    if (_ === "" || _ === "undefined") {
+      console.error("TUNR_URL não encontrado no ENV.");
+      throw new Error("TUNR_URL não encontrado no ENV.");
+    }
+    return _;
+  },
+  TurnUser: () => {
+    const _ = String(process.env["EXPO_PUBLIC_TURN_USER"]);
+    return _;
+  },
+  TurnPassword: () => {
+    const _ = String(process.env["EXPO_PUBLIC_TURN_PASSWORD"]);
     return _;
   },
   Environment: () => {

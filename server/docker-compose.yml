@@ -48,6 +48,30 @@ services:
     entrypoint: ["alembic"]
     command: ["upgrade", "head"]
 
+  turn:
+    build:
+      context: ./turn
+    restart: unless-stopped
+    environment:
+      TURN_PUBLIC_IP: ${TURN_PUBLIC_IP}
+      TURN_REALM: ${TURN_REALM}
+      TURN_MIN_PORT: ${TURN_MIN_PORT:-49160}
+      TURN_MAX_PORT: ${TURN_MAX_PORT:-49200}
+      TURN_USE_AUTH_SECRET: ${TURN_USE_AUTH_SECRET:-true}
+      TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+      TURN_USER: ${TURN_USER:-}
+      TURN_PASS: ${TURN_PASS:-}
+      TURN_ENABLE_TLS: ${TURN_ENABLE_TLS:-false}
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
+      - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/udp"
+      - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/tcp"
+
   signal:
     build:
       context: .

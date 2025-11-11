@@ -16,7 +16,18 @@ import {
 import { Paper, Typography } from "@mui/material";
 import MicLevelMeter from "@/components/room/MicLevelMeter";
 
-const iceServers: RTCIceServer[] = [];
+const iceServers: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: [`stun:${env.TurnUrl()}`] },
+  {
+    urls: [
+      `turn:${env.TurnUrl()}?transport=tcp`,
+      `turn:${env.TurnUrl()}?transport=udp`,
+    ],
+    username: env.TurnUser(),
+    credential: env.TurnPassword(),
+  },
+];
 
 type PeerKey = string | number;
 
