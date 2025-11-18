@@ -1,7 +1,7 @@
 "use client";
 
 import { Chip } from "@mui/material";
-import { Language } from "@/types/profile";
+import { Language } from "@/types/language";
 
 type Props = { languages?: Language[] };
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { Chip, Typography } from "@mui/material";
-import { LangPair, Language } from "@/types/room";
+import { LangPair } from "@/types/room";
+import { Language } from "@/types/language";
 
 type Props = { pairs?: LangPair[] };
 

@@ -17,7 +17,7 @@ export default function UserCreatePage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [snackOpen, setSnackOpen] = useState(false);
 
-  async function handleCreate(payload: UserCreatePayload) {
+  async function handleCreate(payload: any) {
     try {
       setSubmitting(true);
       setErrorMsg(null);

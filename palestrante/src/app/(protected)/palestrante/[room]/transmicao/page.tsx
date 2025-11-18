@@ -84,40 +84,57 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
   const getOrCreatePC = useCallback(
     (peerKey: PeerKey) => {
       let pc = pcsRef.current.get(peerKey);
-      if (pc) return pc;
 
-      pc = new RTCPeerConnection({ iceServers });
-      pcsRef.current.set(peerKey, pc);
-
-      pc.onicecandidate = (evt) => {
-        if (!evt.candidate) return;
-        const cand = evt.candidate.toJSON?.() ?? evt.candidate;
-        if (!peerReadyRef.current.has(peerKey)) {
-          const q = iceQueueRef.current.get(peerKey) ?? [];
-          q.push(cand);
-          iceQueueRef.current.set(peerKey, q);
-          return;
-        }
-        socketRef.current?.emit("ice-candidate", {
-          room: joinedSubRoomRef.current || roomCode,
-          to: peerKey,
-          candidate: cand,
-        });
-      };
-
-      pc.onconnectionstatechange = () => {
-        const st = pc.connectionState;
-        if (st === "failed" || st === "disconnected" || st === "closed") {
+      if (
+        !pc ||
+        pc.connectionState === "closed" ||
+        pc.connectionState === "failed"
+      ) {
+        if (pc) {
           try {
             pc.close();
           } catch {}
-          pcsRef.current.delete(peerKey);
-          connectedPeersRef.current.delete(peerKey);
-          peerReadyRef.current.delete(peerKey);
-          iceQueueRef.current.delete(peerKey);
         }
-        if (st === "connected") connectedPeersRef.current.add(peerKey);
-      };
+
+        pc = new RTCPeerConnection({ iceServers });
+        pcsRef.current.set(peerKey, pc);
+
+        pc.onicecandidate = (evt) => {
+          if (!evt.candidate) return;
+          const cand = evt.candidate.toJSON?.() ?? evt.candidate;
+          if (!peerReadyRef.current.has(peerKey)) {
+            const q = iceQueueRef.current.get(peerKey) ?? [];
+            q.push(cand);
+            iceQueueRef.current.set(peerKey, q);
+            return;
+          }
+          socketRef.current?.emit("ice-candidate", {
+            room: joinedSubRoomRef.current || roomCode,
+            to: peerKey,
+            candidate: cand,
+          });
+        };
+
+        pc.onconnectionstatechange = () => {
+          if (!pc) {
+            return;
+          }
+          const st = pc.connectionState;
+          if (st === "connected") {
+            connectedPeersRef.current.add(peerKey);
+          } else if (st === "disconnected") {
+            connectedPeersRef.current.delete(peerKey);
+          } else if (st === "failed" || st === "closed") {
+            try {
+              pc.close();
+            } catch {}
+            pcsRef.current.delete(peerKey);
+            connectedPeersRef.current.delete(peerKey);
+            peerReadyRef.current.delete(peerKey);
+            iceQueueRef.current.delete(peerKey);
+          }
+        };
+      }
 
       return pc;
     },
@@ -130,9 +147,12 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
       const peerKey = getPeerKey(target);
       if (connectedPeersRef.current.has(peerKey)) return;
 
-      try {
-        const pc = getOrCreatePC(peerKey);
+      const pc = getOrCreatePC(peerKey);
 
+      // evita múltiplos offers em paralelo
+      if (pc.signalingState !== "stable") return;
+
+      try {
         const mic = await ensureMic();
         const hasAudio = pc.getSenders().some((s) => s.track?.kind === "audio");
         if (!hasAudio) mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
@@ -281,17 +301,58 @@ export default function SpeakerPage({ params }: { params: { room: string } }) {
         socket.on("answer", async ({ from, sdp, type }) => {
           const pc = pcsRef.current.get(from);
           if (!pc) return;
-          await pc.setRemoteDescription({ sdp, type });
-          peerReadyRef.current.add(from);
-          const q = iceQueueRef.current.get(from) ?? [];
-          for (const cand of q) {
-            socketRef.current?.emit("ice-candidate", {
-              room: joinedSubRoomRef.current || roomCode,
-              to: from,
-              candidate: cand,
-            });
+
+          const desc: RTCSessionDescriptionInit = { sdp, type };
+
+          try {
+            if (
+              desc.type !== "answer" ||
+              pc.signalingState !== "have-local-offer"
+            ) {
+              console.warn("Answer inesperado, ignorando", {
+                from,
+                signalingState: pc.signalingState,
+                type: desc.type,
+              });
+              return;
+            }
+
+            await pc.setRemoteDescription(desc);
+
+            peerReadyRef.current.add(from);
+
+            const q = iceQueueRef.current.get(from) ?? [];
+            for (const cand of q) {
+              socketRef.current?.emit("ice-candidate", {
+                room: joinedSubRoomRef.current || roomCode,
+                to: from,
+                candidate: cand,
+              });
+            }
+            iceQueueRef.current.delete(from);
+          } catch (err: any) {
+            if (err?.name === "InvalidAccessError") {
+              console.warn("Answer com ICE restart inválido, resetando PC", {
+                from,
+                signalingState: pc.signalingState,
+              });
+
+              try {
+                pc.close();
+              } catch {}
+
+              pcsRef.current.delete(from);
+              connectedPeersRef.current.delete(from);
+              peerReadyRef.current.delete(from);
+              iceQueueRef.current.delete(from);
+
+              // opcional: rediscar o peer aqui se quiser
+              // const member = membersRef.current.find((m) => getPeerKey(m) === from);
+              // if (member) callReceiver(member);
+            } else {
+              console.error("Erro ao aplicar answer", err);
+            }
           }
-          iceQueueRef.current.delete(from);
         });
 
         socket.on("ice-candidate", async ({ from, candidate }) => {

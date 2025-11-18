@@ -1,13 +1,13 @@
-import os
-import re
 import json
 import logging
-from datetime import datetime
+import os
+import re
 from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
-from flask import Flask, request, jsonify
-from flask_socketio import SocketIO, join_room, leave_room, emit
+from flask import Flask, jsonify, request
+from flask_socketio import SocketIO, emit, join_room, leave_room
 
 # =========================
 # Logging
@@ -17,10 +17,28 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()
 ENGINEIO_LOGS = os.getenv("ENGINEIO_LOGS", "0") == "1"
 
 RESERVED_LOG_KEYS = {
-    "name", "msg", "args", "levelname", "levelno", "pathname", "filename", "module",
-    "exc_info", "exc_text", "stack_info", "lineno", "funcName", "created", "msecs",
-    "relativeCreated", "thread", "threadName", "processName", "process"
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "processName",
+    "process",
 }
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -35,21 +53,21 @@ class JsonFormatter(logging.Formatter):
             payload.update(extra)
         return json.dumps(payload, ensure_ascii=False)
 
+
 root_logger = logging.getLogger()
 root_logger.handlers.clear()
 handler = logging.StreamHandler()
 if LOG_FORMAT == "json":
     handler.setFormatter(JsonFormatter())
 else:
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
+    )
 root_logger.addHandler(handler)
 root_logger.setLevel(LOG_LEVEL)
 
 log = logging.getLogger("webrtc_signaling")
 
-# =========================
-# App / Socket.IO
-# =========================
 app = Flask(__name__)
 socketio_logger = log if ENGINEIO_LOGS else False
 socketio = SocketIO(
@@ -58,17 +76,13 @@ socketio = SocketIO(
     async_mode="eventlet",
     logger=False,
     engineio_logger=socketio_logger,
-    path="/signal"
+    path="/signal",
 )
 
-# =========================
-# State
-# =========================
 room_members: dict[str, set[str]] = defaultdict(set)  # room -> {sid, ...}
-sid_rooms: dict[str, set[str]] = defaultdict(set)     # sid  -> {room, ...}
-# meta esperado (por sid):
-# { "role": "...", "pairs": [...], "want": "xx-YY", "source": "xx-YY", "sources": ["xx-YY", ...] }
+sid_rooms: dict[str, set[str]] = defaultdict(set)  # sid  -> {room, ...}
 sid_meta: dict[str, dict[str, Any]] = defaultdict(dict)
+
 
 # =========================
 # Helpers
@@ -83,22 +97,31 @@ def _candidate_type(candidate_obj) -> str | None:
     m = re.search(r"\btyp\s+(\w+)\b", cand_str)
     return m.group(1) if m else None
 
+
 def _sdp_info(desc: dict) -> dict:
     if not isinstance(desc, dict):
         return {"type": None, "sdp_len": 0}
     sdp = desc.get("sdp", "") or ""
     return {"type": desc.get("type"), "sdp_len": len(sdp)}
 
+
 def _log_room_state(room: str):
     size = len(room_members[room])
     log.info(
         "room_state",
-        extra={"event": "room_state", "room": room, "size": size, "members": list(room_members[room])},
+        extra={
+            "event": "room_state",
+            "room": room,
+            "size": size,
+            "members": list(room_members[room]),
+        },
     )
+
 
 def _channel_name(room: str, src_code: str) -> str:
     """Nome do subroom do canal por linguagem de origem."""
     return f"{room}::src::{src_code}"
+
 
 def _extract_sources(meta: dict) -> set[str]:
     """
@@ -122,6 +145,7 @@ def _extract_sources(meta: dict) -> set[str]:
                 continue
     return out
 
+
 def _member_payload(sid: str) -> dict:
     """
     Payload público do membro para room-info/peer-joined.
@@ -134,11 +158,14 @@ def _member_payload(sid: str) -> dict:
             payload[k] = meta[k]
     return payload
 
+
 def _members_payload(room: str) -> list[dict]:
     return [_member_payload(s) for s in room_members[room]]
 
+
 def _in_room(sid: str, room: str) -> bool:
     return sid in room_members.get(room, set())
+
 
 def _augment_with_sender_meta(data: dict) -> dict:
     sender_meta = sid_meta.get(request.sid, {})
@@ -157,50 +184,65 @@ def _augment_with_sender_meta(data: dict) -> dict:
     data["meta"] = meta
     return data
 
+
 def _join_source_channels_for_sid(sid: str, room: str, sources: set[str]):
     """Inscreve o sid nos subrooms por origem para aquele room."""
     for src in sources:
         ch = _channel_name(room, src)
         join_room(ch, sid=sid)
-        log.debug("channel_join", extra={"event": "channel_join", "sid": sid, "room": room, "channel": ch})
+        log.debug(
+            "channel_join",
+            extra={"event": "channel_join", "sid": sid, "room": room, "channel": ch},
+        )
+
 
 def _leave_source_channels_for_sid(sid: str, room: str, sources: set[str]):
     """Remove o sid dos subrooms por origem para aquele room."""
     for src in sources:
         ch = _channel_name(room, src)
         leave_room(ch, sid=sid)
-        log.debug("channel_leave", extra={"event": "channel_leave", "sid": sid, "room": room, "channel": ch})
+        log.debug(
+            "channel_leave",
+            extra={"event": "channel_leave", "sid": sid, "room": room, "channel": ch},
+        )
 
-# =========================
-# HTTP
-# =========================
+
 @app.get("/healthz")
 def healthz():
     return jsonify(status="ok")
 
-# =========================
-# Socket.IO handlers
-# =========================
+
 @socketio.on("connect")
 def on_connect():
-    log.info("client_connected", extra={"event": "connect", "sid": request.sid, "ip": request.remote_addr})
+    log.info(
+        "client_connected",
+        extra={"event": "connect", "sid": request.sid, "ip": request.remote_addr},
+    )
+
 
 @socketio.on("disconnect")
 def on_disconnect(reason=None):
     sid = request.sid
-    # Remover de todos os subrooms de origem (para cada sala que o sid participava)
     meta = sid_meta.get(sid, {})
     old_sources = _extract_sources(meta)
     rooms_to_remove = list(sid_rooms.get(sid, []))
     for room in rooms_to_remove:
         _leave_source_channels_for_sid(sid, room, old_sources)
-        # Remover do room base
         if sid in room_members[room]:
             room_members[room].remove(sid)
-            emit("peer-left", {"member": _member_payload(sid)}, room=room, include_self=False)
+            emit(
+                "peer-left",
+                {"member": _member_payload(sid)},
+                room=room,
+                include_self=False,
+            )
             emit(
                 "room-info",
-                {"room": room, "room_size": len(room_members[room]), "members": _members_payload(room)},
+                {
+                    "room": room,
+                    "room_size": len(room_members[room]),
+                    "members": _members_payload(room),
+                },
                 room=room,
             )
         sid_rooms[sid].discard(room)
@@ -208,8 +250,14 @@ def on_disconnect(reason=None):
     sid_meta.pop(sid, None)
     log.info(
         "client_disconnected",
-        extra={"event": "disconnect", "sid": sid, "rooms": rooms_to_remove, "reason": reason},
+        extra={
+            "event": "disconnect",
+            "sid": sid,
+            "rooms": rooms_to_remove,
+            "reason": reason,
+        },
     )
+
 
 @socketio.on("join")
 def on_join(data):
@@ -227,12 +275,10 @@ def on_join(data):
     source = data.get("source")
     want = data.get("want") or data.get("target") or data.get("target_code")
 
-    # Entrar no room base
     join_room(room)
     room_members[room].add(request.sid)
     sid_rooms[request.sid].add(room)
 
-    # Atualizar meta
     meta = sid_meta.get(request.sid, {})
     if role is not None:
         meta["role"] = role
@@ -243,7 +289,6 @@ def on_join(data):
     if want is not None:
         meta["want"] = want
 
-    # Calcular e ingressar nos canais por origem
     sources = _extract_sources(meta)
     if sources:
         meta["sources"] = sorted(sources)
@@ -254,48 +299,78 @@ def on_join(data):
 
     log.info(
         "peer_joined",
-        extra={"event": "join", "sid": request.sid, "room": room, "room_size": len(room_members[room]), "role": role, "sources": list(sources)},
+        extra={
+            "event": "join",
+            "sid": request.sid,
+            "room": room,
+            "room_size": len(room_members[room]),
+            "role": role,
+            "sources": list(sources),
+        },
     )
     _log_room_state(room)
 
-    # room-info para quem entrou
     emit(
         "room-info",
-        {"room": room, "room_size": len(room_members[room]), "members": _members_payload(room)},
+        {
+            "room": room,
+            "room_size": len(room_members[room]),
+            "members": _members_payload(room),
+        },
         to=request.sid,
     )
-    # notificações de entrada e room-info para os demais
-    emit("peer-joined", {"member": _member_payload(request.sid)}, room=room, include_self=False)
+    emit(
+        "peer-joined",
+        {"member": _member_payload(request.sid)},
+        room=room,
+        include_self=False,
+    )
     emit(
         "room-info",
-        {"room": room, "room_size": len(room_members[room]), "members": _members_payload(room)},
+        {
+            "room": room,
+            "room_size": len(room_members[room]),
+            "members": _members_payload(room),
+        },
         room=room,
         include_self=False,
     )
 
+
 @socketio.on("leave")
 def on_leave(data):
     room = data.get("room")
-    # Remover dos subrooms por origem
     meta = sid_meta.get(request.sid, {})
     old_sources = _extract_sources(meta)
     _leave_source_channels_for_sid(request.sid, room, old_sources)
 
-    # Remover do room base
     leave_room(room)
     if request.sid in room_members[room]:
         room_members[room].remove(request.sid)
     sid_rooms[request.sid].discard(room)
 
-    log.info("peer_left", extra={"event": "leave", "sid": request.sid, "room": room, "room_size": len(room_members[room])})
+    log.info(
+        "peer_left",
+        extra={
+            "event": "leave",
+            "sid": request.sid,
+            "room": room,
+            "room_size": len(room_members[room]),
+        },
+    )
     _log_room_state(room)
 
     emit("peer-left", {"member": _member_payload(request.sid)}, room=room)
     emit(
         "room-info",
-        {"room": room, "room_size": len(room_members[room]), "members": _members_payload(room)},
+        {
+            "room": room,
+            "room_size": len(room_members[room]),
+            "members": _members_payload(room),
+        },
         room=room,
     )
+
 
 @socketio.on("update-meta")
 def on_update_meta(data):
@@ -316,39 +391,48 @@ def on_update_meta(data):
                 meta[key] = data[key]
     sid_meta[sid] = meta
 
-    # Reavaliar canais por origem para TODAS as salas que este sid participa
     after_sources = _extract_sources(meta)
     for room in list(sid_rooms.get(sid, [])):
-        # sair de canais antigos
         for src in before_sources - after_sources:
             _leave_source_channels_for_sid(sid, room, {src})
-        # entrar em novos canais
         for src in after_sources - before_sources:
             _join_source_channels_for_sid(sid, room, {src})
-        # guardar 'sources' visível para clientes
         meta["sources"] = sorted(after_sources)
         sid_meta[sid] = meta
 
-        # atualizar room-info
         emit(
             "room-info",
-            {"room": room, "room_size": len(room_members[room]), "members": _members_payload(room)},
+            {
+                "room": room,
+                "room_size": len(room_members[room]),
+                "members": _members_payload(room),
+            },
             room=room,
         )
 
     log.info(
         "meta_updated",
-        extra={"event": "update-meta", "sid": sid, "meta": {k: meta.get(k) for k in ("role", "want", "source", "sources")}},
+        extra={
+            "event": "update-meta",
+            "sid": sid,
+            "meta": {k: meta.get(k) for k in ("role", "want", "source", "sources")},
+        },
     )
+
 
 @socketio.on("list-members")
 def on_list_members(data):
     room = data.get("room")
     emit(
         "room-info",
-        {"room": room, "room_size": len(room_members[room]), "members": _members_payload(room)},
+        {
+            "room": room,
+            "room_size": len(room_members[room]),
+            "members": _members_payload(room),
+        },
         to=request.sid,
     )
+
 
 # =========================
 # Signaling
@@ -358,21 +442,38 @@ def on_offer(data):
     room = data.get("room")
     to_sid = data.get("to")
     offer_meta = _sdp_info(data.get("offer"))
-    data = _augment_with_sender_meta(data)  # preserva 'room' e inclui 'from' e meta do sender
-
+    data = _augment_with_sender_meta(data)
     if to_sid:
         if not _in_room(to_sid, room):
-            log.warning("offer_target_not_in_room", extra={"event": "offer", "sid": request.sid, "room": room, "to": to_sid})
+            log.warning(
+                "offer_target_not_in_room",
+                extra={
+                    "event": "offer",
+                    "sid": request.sid,
+                    "room": room,
+                    "to": to_sid,
+                },
+            )
             return
         log.info(
             "offer_routed_1to1",
-            extra={"event": "offer", "sid": request.sid, "room": room, "to": to_sid, **offer_meta, "src": data.get("meta", {}).get("src")},
+            extra={
+                "event": "offer",
+                "sid": request.sid,
+                "room": room,
+                "to": to_sid,
+                **offer_meta,
+                "src": data.get("meta", {}).get("src"),
+            },
         )
         emit("offer", data, to=to_sid)
     else:
-        # Opcional: se não quiser broadcast, basta retornar aqui.
-        log.info("offer_broadcast", extra={"event": "offer", "sid": request.sid, "room": room, **offer_meta})
+        log.info(
+            "offer_broadcast",
+            extra={"event": "offer", "sid": request.sid, "room": room, **offer_meta},
+        )
         emit("offer", data, room=room, include_self=False)
+
 
 @socketio.on("answer")
 def on_answer(data):
@@ -383,16 +484,35 @@ def on_answer(data):
 
     if to_sid:
         if not _in_room(to_sid, room):
-            log.warning("answer_target_not_in_room", extra={"event": "answer", "sid": request.sid, "room": room, "to": to_sid})
+            log.warning(
+                "answer_target_not_in_room",
+                extra={
+                    "event": "answer",
+                    "sid": request.sid,
+                    "room": room,
+                    "to": to_sid,
+                },
+            )
             return
         log.info(
             "answer_routed_1to1",
-            extra={"event": "answer", "sid": request.sid, "room": room, "to": to_sid, **answer_meta, "src": data.get("meta", {}).get("src")},
+            extra={
+                "event": "answer",
+                "sid": request.sid,
+                "room": room,
+                "to": to_sid,
+                **answer_meta,
+                "src": data.get("meta", {}).get("src"),
+            },
         )
         emit("answer", data, to=to_sid)
     else:
-        log.info("answer_broadcast", extra={"event": "answer", "sid": request.sid, "room": room, **answer_meta})
+        log.info(
+            "answer_broadcast",
+            extra={"event": "answer", "sid": request.sid, "room": room, **answer_meta},
+        )
         emit("answer", data, room=room, include_self=False)
+
 
 @socketio.on("ice-candidate")
 def on_ice_candidate(data):
@@ -404,23 +524,47 @@ def on_ice_candidate(data):
 
     if to_sid:
         if not _in_room(to_sid, room):
-            log.warning("ice_target_not_in_room", extra={"event": "ice-candidate", "sid": request.sid, "room": room, "to": to_sid})
+            log.warning(
+                "ice_target_not_in_room",
+                extra={
+                    "event": "ice-candidate",
+                    "sid": request.sid,
+                    "room": room,
+                    "to": to_sid,
+                },
+            )
             return
         log.debug(
             "ice_routed_1to1",
-            extra={"event": "ice-candidate", "sid": request.sid, "room": room, "to": to_sid, "candidate_type": cand_type, "src": data.get("meta", {}).get("src")},
+            extra={
+                "event": "ice-candidate",
+                "sid": request.sid,
+                "room": room,
+                "to": to_sid,
+                "candidate_type": cand_type,
+                "src": data.get("meta", {}).get("src"),
+            },
         )
         emit("ice-candidate", data, to=to_sid)
     else:
         log.debug(
             "ice_broadcast",
-            extra={"event": "ice-candidate", "sid": request.sid, "room": room, "candidate_type": cand_type},
+            extra={
+                "event": "ice-candidate",
+                "sid": request.sid,
+                "room": room,
+                "candidate_type": cand_type,
+            },
         )
         emit("ice-candidate", data, room=room, include_self=False)
 
+
 @socketio.on_error_default
 def default_error_handler(e):
-    log.exception("socketio_handler_error", extra={"event": "error", "sid": request.sid})
+    log.exception(
+        "socketio_handler_error", extra={"event": "error", "sid": request.sid}
+    )
+
 
 # =========================
 # Main
@@ -430,6 +574,11 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "5002"))
     log.info(
         "starting_signaling_server",
-        extra={"host": host, "port": port, "log_level": LOG_LEVEL, "engineio_logs": ENGINEIO_LOGS},
+        extra={
+            "host": host,
+            "port": port,
+            "log_level": LOG_LEVEL,
+            "engineio_logs": ENGINEIO_LOGS,
+        },
     )
     socketio.run(app, host=host, port=port)
