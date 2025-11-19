@@ -5,7 +5,6 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Project Palestrante",
-  description: "Developed by Raisson",
 };
 
 export default function RootLayout({
