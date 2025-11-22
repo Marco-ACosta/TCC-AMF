@@ -1,5 +1,6 @@
 import env from "@/config/env";
 import RoomService from "@/services/api/RoomService";
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, {
   useCallback,
@@ -23,22 +24,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { io, Socket } from "socket.io-client";
 
 type WebRTCModule = typeof import("react-native-webrtc");
-type InCallType = typeof import("react-native-incall-manager").default;
-let InCallManager: InCallType | null = null;
-
-async function ensureInCall(): Promise<InCallType | null> {
-  if (InCallManager) return InCallManager;
-  if (Platform.OS === "ios" || Platform.OS === "android") {
-    try {
-      const mod = await import("react-native-incall-manager");
-      InCallManager = mod.default;
-      return InCallManager;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
 
 type Language = { code: string; name: string };
 type Speaker = {
@@ -158,6 +143,27 @@ export default function ListenScreen() {
 
   const safePadBottom = Math.max(16, insets.bottom + 16);
 
+  // --- CONFIGURAÇÃO DE ÁUDIO (EXPO-AV) ---
+  useEffect(() => {
+    const configureAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false, // Define modo Playback (não VoIP) no iOS
+          playsInSilentModeIOS: true, // Toca mesmo com switch lateral ativado
+          staysActiveInBackground: true, // Mantém áudio em background
+          shouldDuckAndroid: true, // Baixa volume de outros apps no Android
+          playThroughEarpieceAndroid: false, // Força alto-falante no Android
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        });
+      } catch (e) {
+        console.warn("Falha ao configurar modo de áudio:", e);
+      }
+    };
+    configureAudio();
+  }, []);
+  // ---------------------------------------
+
   const fetchRoom = useCallback(async () => {
     if (!roomCode) {
       setRoom(null);
@@ -198,7 +204,7 @@ export default function ListenScreen() {
         setWebrtcReady(true);
       } catch {
         setError(
-          "Módulo nativo WebRTC não encontrado. Rode com um Dev Client: expo prebuild && npx pod-install && expo run:android|ios (ou EAS Build)."
+          "Módulo nativo WebRTC não encontrado. Rode com um Dev Client."
         );
         setWebrtcReady(false);
       }
@@ -371,23 +377,11 @@ export default function ListenScreen() {
         socketRef.current?.emit("ice-candidate", payload);
       };
       (pc as AnyRTCPeerConnection).ontrack = async () => {
-        try {
-          const icm = await ensureInCall();
-          icm?.start({ media: "audio" });
-          icm?.setForceSpeakerphoneOn(true);
-        } catch {}
+        // Áudio flui automaticamente conforme setAudioModeAsync
         startRxMonitor(pc!);
       };
       (pc as AnyRTCPeerConnection).onconnectionstatechange = () => {
         const st = (pc as AnyRTCPeerConnection)?.connectionState;
-        if (st === "connected") {
-          ensureInCall()
-            .then((icm) => {
-              icm?.start({ media: "audio" });
-              icm?.setForceSpeakerphoneOn(true);
-            })
-            .catch(() => {});
-        }
         if (st === "failed" || st === "closed" || st === "disconnected") {
           pcsRef.current.delete(peerId);
           peerRoomRef.current.delete(peerId);
@@ -587,9 +581,6 @@ export default function ListenScreen() {
       pcsRef.current.clear();
       peerRoomRef.current.clear();
       stopRxMonitor();
-      ensureInCall()
-        .then((icm) => icm?.stop())
-        .catch(() => {});
       joinedRoomsRef.current.clear();
     };
   }, [
