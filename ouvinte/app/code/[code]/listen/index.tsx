@@ -1,6 +1,7 @@
 import env from "@/config/env";
 import RoomService from "@/services/api/RoomService";
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
+import { setAudioModeAsync } from "expo-audio";
+import InCallManager from "react-native-incall-manager";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, {
   useCallback,
@@ -12,7 +13,6 @@ import React, {
 import {
   Animated,
   Easing,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -87,6 +87,8 @@ type RxStats = {
   pps: number;
   isReceiving: boolean;
   lastAt: number;
+  rtt_ms?: number;
+  jitter_ms?: number;
 };
 type AnyRTCPeerConnection = any;
 
@@ -98,6 +100,21 @@ function uuid4(): string {
   });
 }
 
+const configureAudioSession = async () => {
+  try {
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionModeAndroid: "duckOthers",
+      interruptionMode: "mixWithOthers",
+      shouldRouteThroughEarpiece: true,
+    });
+  } catch (e) {
+    console.warn("Erro ao configurar áudio:", e);
+  }
+};
+
 export default function ListenScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -107,12 +124,10 @@ export default function ListenScreen() {
   }>();
   const roomCode = useMemo(() => String(code ?? "").trim(), [code]);
 
-  const [loading, setLoading] = useState(true);
   const [room, setRoom] = useState<RoomDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const webrtcRef = useRef<WebRTCModule | null>(null);
-  const [webrtcReady, setWebrtcReady] = useState(false);
 
   const [audioLang, setAudioLang] = useState<LanguageOption | null>(null);
   const [captionLang, setCaptionLang] = useState<LanguageOption | null>(null);
@@ -134,6 +149,8 @@ export default function ListenScreen() {
     pps: 0,
     isReceiving: false,
     lastAt: 0,
+    rtt_ms: undefined,
+    jitter_ms: undefined,
   });
   const statsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -143,35 +160,18 @@ export default function ListenScreen() {
 
   const safePadBottom = Math.max(16, insets.bottom + 16);
 
-  // --- CONFIGURAÇÃO DE ÁUDIO (EXPO-AV) ---
   useEffect(() => {
-    const configureAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false, // Define modo Playback (não VoIP) no iOS
-          playsInSilentModeIOS: true, // Toca mesmo com switch lateral ativado
-          staysActiveInBackground: true, // Mantém áudio em background
-          shouldDuckAndroid: true, // Baixa volume de outros apps no Android
-          playThroughEarpieceAndroid: false, // Força alto-falante no Android
-          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-        });
-      } catch (e) {
-        console.warn("Falha ao configurar modo de áudio:", e);
-      }
-    };
-    configureAudio();
+    configureAudioSession();
+    const interval = setInterval(() => {}, 5000);
+    return () => clearInterval(interval);
   }, []);
-  // ---------------------------------------
 
   const fetchRoom = useCallback(async () => {
     if (!roomCode) {
       setRoom(null);
       setError("Código ausente.");
-      setLoading(false);
       return;
     }
-    setLoading(true);
     setError(null);
     try {
       const res = await RoomService.GetByCode(roomCode);
@@ -185,8 +185,6 @@ export default function ListenScreen() {
     } catch (e: any) {
       setRoom(null);
       setError(e?.message ?? "Falha ao carregar os dados da sessão.");
-    } finally {
-      setLoading(false);
     }
   }, [roomCode]);
 
@@ -201,12 +199,10 @@ export default function ListenScreen() {
         const mod = await import("react-native-webrtc");
         if (!alive) return;
         webrtcRef.current = mod;
-        setWebrtcReady(true);
       } catch {
         setError(
           "Módulo nativo WebRTC não encontrado. Rode com um Dev Client."
         );
-        setWebrtcReady(false);
       }
     })();
     return () => {
@@ -298,6 +294,8 @@ export default function ListenScreen() {
       kbps: 0,
       pps: 0,
       isReceiving: false,
+      rtt_ms: undefined,
+      jitter_ms: undefined,
     }));
   }, []);
 
@@ -307,34 +305,59 @@ export default function ListenScreen() {
       let lastBytes = 0;
       let lastPkts = 0;
       let lastTs = 0;
+
       statsTimerRef.current = setInterval(async () => {
         try {
           const stats = await pc.getStats();
           let level = 0;
           let bytes = 0;
           let pkts = 0;
+          let rttMs: number | undefined;
+          let jitterMs: number | undefined;
+
           const ts = Date.now();
+
           stats.forEach((r: any) => {
             if (r.type === "inbound-rtp" && r.kind === "audio") {
-              if (typeof r.audioLevel === "number")
+              if (typeof r.audioLevel === "number") {
                 level = Math.max(level, r.audioLevel);
-              if (typeof r.bytesReceived === "number") bytes = r.bytesReceived;
-              if (typeof r.packetsReceived === "number")
+              }
+              if (typeof r.bytesReceived === "number") {
+                bytes = r.bytesReceived;
+              }
+              if (typeof r.packetsReceived === "number") {
                 pkts = r.packetsReceived;
+              }
+              if (typeof r.jitter === "number") {
+                jitterMs = r.jitter * 1000;
+              }
+            }
+
+            if (r.type === "candidate-pair" && r.state === "succeeded") {
+              if (typeof r.currentRoundTripTime === "number") {
+                rttMs = r.currentRoundTripTime * 1000;
+              } else if (typeof r.roundTripTime === "number") {
+                rttMs = r.roundTripTime * 1000;
+              }
             }
           });
+
           const dt = lastTs ? (ts - lastTs) / 1000 : 0;
           const kbps =
             dt > 0 ? (Math.max(0, bytes - lastBytes) * 8) / dt / 1000 : 0;
           const pps = dt > 0 ? Math.max(0, pkts - lastPkts) / dt : 0;
           const receiving = level > 0.001 || kbps > 1 || pps > 0.5;
+
           setRx({
             level,
             kbps: Number(kbps.toFixed(1)),
             pps: Number(pps.toFixed(1)),
             isReceiving: receiving,
             lastAt: receiving ? ts : lastTs || 0,
+            rtt_ms: rttMs,
+            jitter_ms: jitterMs,
           });
+
           lastBytes = bytes;
           lastPkts = pkts;
           lastTs = ts;
@@ -365,6 +388,7 @@ export default function ListenScreen() {
       try {
         (pc as any).addTransceiver?.("audio", { direction: "recvonly" });
       } catch {}
+
       (pc as AnyRTCPeerConnection).onicecandidate = (evt: any) => {
         if (!evt.candidate) return;
         const room = peerRoomRef.current.get(peerId) || roomCode;
@@ -376,12 +400,19 @@ export default function ListenScreen() {
         };
         socketRef.current?.emit("ice-candidate", payload);
       };
+
       (pc as AnyRTCPeerConnection).ontrack = async () => {
-        // Áudio flui automaticamente conforme setAudioModeAsync
+        await configureAudioSession();
+        setTimeout(() => configureAudioSession(), 500);
+
         startRxMonitor(pc!);
       };
-      (pc as AnyRTCPeerConnection).onconnectionstatechange = () => {
+
+      (pc as AnyRTCPeerConnection).onconnectionstatechange = async () => {
         const st = (pc as AnyRTCPeerConnection)?.connectionState;
+        if (st === "connected") {
+          await configureAudioSession();
+        }
         if (st === "failed" || st === "closed" || st === "disconnected") {
           pcsRef.current.delete(peerId);
           peerRoomRef.current.delete(peerId);
@@ -477,13 +508,19 @@ export default function ListenScreen() {
   );
 
   useEffect(() => {
-    let alive = true;
+    InCallManager.start({ media: "audio", auto: true });
+    InCallManager.setSpeakerphoneOn(false);
     const socket = io(env.ApiUrl(), {
       transports: ["websocket"],
       path: "/signal",
       withCredentials: false,
     });
     socketRef.current = socket;
+
+    const initialJoinedRooms = Array.from(joinedRoomsRef.current.values());
+    const pcs = pcsRef.current;
+    const peerRooms = peerRoomRef.current;
+    const joinedRooms = joinedRoomsRef.current;
 
     const onConnect = () => {
       joinRoomsForTarget(audioLangRef.current).catch(() => {});
@@ -561,9 +598,9 @@ export default function ListenScreen() {
     socket.on("bye", onBye);
 
     return () => {
-      alive = false;
+      InCallManager.stop();
       try {
-        const rooms = Array.from(joinedRoomsRef.current.values());
+        const rooms = initialJoinedRooms;
         for (const r of rooms) socket.emit("leave", { room: r });
       } catch {}
       socket.off("connect", onConnect);
@@ -573,15 +610,15 @@ export default function ListenScreen() {
       socket.disconnect();
       socketRef.current = null;
 
-      pcsRef.current.forEach((pc) => {
+      pcs.forEach((pc) => {
         try {
           (pc as AnyRTCPeerConnection).close();
         } catch {}
       });
-      pcsRef.current.clear();
-      peerRoomRef.current.clear();
+      pcs.clear();
+      peerRooms.clear();
       stopRxMonitor();
-      joinedRoomsRef.current.clear();
+      joinedRooms.clear();
     };
   }, [
     roomCode,
@@ -596,16 +633,6 @@ export default function ListenScreen() {
     if (!audioLang?.code) return;
     joinRoomsForTarget(audioLang.code).catch(() => {});
   }, [audioLang?.code, joinRoomsForTarget]);
-
-  function Avatar() {
-    const first = room?.speakers?.[0]?.name?.trim() ?? "";
-    const initials = first ? first[0]?.toUpperCase() : "★";
-    return (
-      <View style={styles.avatar}>
-        <Text style={{ color: "#fff", fontWeight: "700" }}>{initials}</Text>
-      </View>
-    );
-  }
 
   function WaveformStub() {
     const base = Math.min(28, 4 + Math.round(rx.level * 80));
