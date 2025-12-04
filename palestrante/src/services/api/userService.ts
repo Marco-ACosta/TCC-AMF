@@ -61,8 +61,8 @@ export default class UserService extends Endpoints {
   }
 
   static async DeleteUser(id: number) {
-    return await this.Get<any>({
-      url: `user/${id}}`,
+    return await this.Delete<any>({
+      url: `user/${id}`,
       authorization: LocalStorage.apiToken.get() ?? "",
     });
   }

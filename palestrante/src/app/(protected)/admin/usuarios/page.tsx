@@ -58,7 +58,6 @@ export default function UsersPage() {
 
       const res = await UserService.GetUsers(typeParam);
       const data = res.Data;
-      console.log("data", data);
       const list: UserItem[] = (data as any[]).map((u) => ({
         id: u.id,
         name: u.name,
@@ -122,7 +121,7 @@ export default function UsersPage() {
     }
 
     try {
-      await UserService.DeleteUser?.(idNum);
+      await UserService.DeleteUser(idNum);
       setUsers((prev) => prev.filter((u) => u.id !== target.id));
       setSnack({
         open: true,
